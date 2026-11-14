@@ -50,4 +50,4 @@ Found a bug or have an idea? [Open a GitHub issue](https://github.com/Baeleaf/So
 
 ## More
 
-[Detailed guide & troubleshooting](docs/REFERENCE.md) � [All Rights Reserved](LICENSE)
+[Detailed guide & troubleshooting](docs/REFERENCE.md) | [All Rights Reserved](LICENSE)
