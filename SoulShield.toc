@@ -1,8 +1,9 @@
 ## Interface: 16001
 ## AllowLoadGameType: camelot
 ## Title: SoulShield
-## Notes: A quiet, personal absorb bar and Weakened Soul countdown for priests.
+## Notes: Personal Weakened Soul tracker, Power Word: Shield timer, and absorb bar for priests.
 ## Author: Baeleaf
+## X-License: All Rights Reserved
 ## Version: 0.2.4
 ## SavedVariablesPerCharacter: SoulShieldDB
 ## OptionalDeps: Blizzard_AuraContainer, Blizzard_EditMode
