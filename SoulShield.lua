@@ -1,4 +1,5 @@
-local addonName = ...
+local addonName, ns = ...
+local Appearance = ns.Appearance
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local SHIELD_IDS = {
@@ -103,6 +104,8 @@ local function LayoutParts()
     local shieldScale = db.groupOptions.shield.scale
     if bar.edge then bar.edge:SetSize(2 * shieldScale, db.barHeight * shieldScale) end
     if preview and preview.absorb.edge then preview.absorb.edge:SetSize(2 * shieldScale, db.barHeight * shieldScale) end
+    Appearance.Layout(bar, db.width * shieldScale, db.barHeight * shieldScale)
+    if preview then Appearance.Layout(preview.absorb, db.width * shieldScale, db.barHeight * shieldScale) end
     for key, handle in pairs(handles) do
         local spec, offset = groups[key], db.groups[key]
         handle:ClearAllPoints()
@@ -138,6 +141,11 @@ local function Text(parent, size, r, g, b, group, role)
     text:SetFont(FONT, applied, "OUTLINE")
     if group then table.insert(textRegions, { region = text, size = size, group = group, role = role, applied = applied }) end
     text:SetTextColor(r or 1, g or 1, b or 1)
+    if group then
+        local key = group == "weakenedSoul" and (role == "cross" and "cross" or "ready")
+            or (role == "number" and "numbers" or "labels")
+        Appearance.Text(text, key)
+    end
     text:SetShadowOffset(1, -1)
     return text
 end
@@ -162,14 +170,20 @@ local function NewBar(parent, height, r, g, b)
     local background = status:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints()
     background:SetColorTexture(0.035, 0.025, 0.055, 0.85)
+    status.background = background
     return status
 end
 
 local function BuildAbsorb(parent)
     local status = NewBar(parent, 19, 0.55, 0.28, 0.85)
-    local label = Text(status, 11, 0.95, 0.91, 1, "shield")
+    Appearance.Attach(status, "absorb")
+    -- Keep readable text above the child frame that draws the liquid.
+    local textLayer = CreateFrame("Frame", nil, status)
+    textLayer:SetAllPoints(status)
+    textLayer:SetFrameLevel(status:GetFrameLevel() + 3)
+    local label = Text(textLayer, 11, 0.95, 0.91, 1, "shield")
     label:SetText("Absorb")
-    local amount = Text(status, 12, 1, 1, 1, "shield")
+    local amount = Text(textLayer, 12, 1, 1, 1, "shield", "number")
     -- Follow the native fill without inspecting its secret value or geometry.
     local edge = status:CreateTexture(nil, "OVERLAY")
     edge:SetColorTexture(1, 0.95, 1, 0.95)
@@ -220,7 +234,7 @@ local function UpdateAbsorb()
         -- Max health provides a native-safe fallback, without a zero maximum.
         bar:SetMinMaxValues(0, UnitHealthMax("player"))
     end
-    bar:SetValue(amount)
+    Appearance.SetValue(bar, amount)
     amountText:SetFormattedText("%.0f", amount)
     -- SetValue explicitly accepts secret inputs from tainted addon execution.
     -- A 0..1 native fill clips the display to nothing at zero, or full width
@@ -250,12 +264,13 @@ local function NativeTimer(button, shield)
         button:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -48)
         button:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -48)
         local duration = NewBar(button, 3, 0.63, 0.43, 0.94)
+        Appearance.Attach(duration, "duration")
         duration:SetPoint("TOPLEFT")
         duration:SetPoint("TOPRIGHT")
         local label = Text(button, 11, 0.8, 0.77, 0.86, "shield")
         label:SetPoint("TOPLEFT", 0, -8)
         label:SetText("Shield expires in")
-        local countdown = Text(button, 11, 0.9, 0.86, 1, "shield")
+        local countdown = Text(button, 11, 0.9, 0.86, 1, "shield", "number")
         countdown:SetPoint("TOPRIGHT", 0, -8)
         button:SetDurationBar(duration, { direction = Enum.StatusBarTimerDirection.RemainingTime })
         button:SetDurationText(countdown, TimerOptions())
@@ -341,13 +356,14 @@ local function BuildPreview()
     preview.readyIcon:SetShown(db.groupOptions.weakenedSoul.showIcon)
     preview.readyCross:SetShown(db.groupOptions.weakenedSoul.showIcon)
     preview.duration = NewBar(preview, 3, 0.63, 0.43, 0.94)
+    Appearance.Attach(preview.duration, "duration")
     preview.duration:SetPoint("TOPLEFT", 0, -48)
     preview.duration:SetPoint("TOPRIGHT", 0, -48)
     preview.duration:SetMinMaxValues(0, 30)
     preview.label = Text(preview, 11, 0.8, 0.77, 0.86, "shield")
     preview.label:SetPoint("TOPLEFT", 0, -56)
     preview.label:SetText("Shield expires in")
-    preview.time = Text(preview, 11, 0.9, 0.86, 1, "shield")
+    preview.time = Text(preview, 11, 0.9, 0.86, 1, "shield", "number")
     preview.time:SetPoint("TOPRIGHT", 0, -56)
     preview.parts = {
         absorb = preview.absorb, absorbLabel = preview.absorbLabel, absorbAmount = preview.absorbAmount,
@@ -416,7 +432,7 @@ local function TickPreview()
     preview.label:SetShown(absorb > 0)
     preview.time:SetShown(absorb > 0)
     preview.absorb:SetMinMaxValues(0, 1100)
-    preview.absorb:SetValue(absorb)
+    Appearance.SetValue(preview.absorb, absorb)
     preview.absorbAmount:SetFormattedText("%.0f", absorb)
 end
 
@@ -532,17 +548,6 @@ local function BuildSettingsPanel()
     AddSettingsSlider(panel, "iconSize", "Icon size", 12, 40, 1, -174, "%d",
         function() return db.groupOptions.weakenedSoul.iconSize end,
         function(value) db.groupOptions.weakenedSoul.iconSize = value end)
-    local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    panel.controls.showIcon = check
-    check:SetSize(26, 26); check:SetPoint("TOPLEFT", 20, -224)
-    local checkText = Text(check, 12, 0.95, 0.92, 1)
-    checkText:SetPoint("LEFT", check, "RIGHT", 3, 0)
-    checkText:SetText("Show crossed-out shield icon")
-    check:SetScript("OnClick", function(self)
-        if InCombatLockdown() or db.locked then return end
-        db.groupOptions.weakenedSoul.showIcon = self:GetChecked() and true or false
-        Layout(); TickPreview()
-    end)
     local help = Text(panel, 11, 0.75, 0.73, 0.8)
     help:SetPoint("BOTTOM", 0, 65)
     help:SetText("Drag a group to move it.\nChanges save automatically for this character.")
@@ -552,7 +557,9 @@ local function BuildSettingsPanel()
     reset:SetText("Reset group")
     reset:SetScript("OnClick", function()
         if InCombatLockdown() or db.locked then return end
-        for key, value in pairs(groupDefaults[selectedGroup]) do db.groupOptions[selectedGroup][key] = value end
+        for key, value in pairs(groupDefaults[selectedGroup]) do
+            if key ~= "showIcon" then db.groupOptions[selectedGroup][key] = value end
+        end
         db.groups[selectedGroup] = { x = 0, y = 0 }
         if selectedGroup == "shield" then db.width, db.barHeight = defaults.width, defaults.barHeight end
         Layout(); TickPreview(); ShowSettings(selectedGroup)
@@ -579,8 +586,7 @@ ShowSettings = function(group)
     controls.width:SetShown(selectedGroup == "shield")
     controls.barHeight:SetShown(selectedGroup == "shield")
     controls.iconSize:SetShown(selectedGroup == "weakenedSoul")
-    controls.showIcon:SetShown(selectedGroup == "weakenedSoul")
-    controls.showIcon:SetChecked(db.groupOptions.weakenedSoul.showIcon)
+    settingsPanel:SetHeight(selectedGroup == "shield" and 370 or 320)
     settingsPanel.subtitle:SetText(selectedGroup == "shield" and "Absorb display" or "Shield Ready")
     updatingControls = false
     settingsPanel:Show()
@@ -635,6 +641,7 @@ local function Initialize()
     if select(2, UnitClass("player")) ~= "PRIEST" then return end
     db = type(SoulShieldDB) == "table" and SoulShieldDB or {}
     SoulShieldDB = db
+    Appearance.Init(db)
     for key, value in pairs(defaults) do
         if type(db[key]) ~= type(value) then db[key] = value end
     end
@@ -724,8 +731,22 @@ local function Initialize()
     BuildHandles()
     initialized = true
     Layout()
+    Appearance.Apply()
     UpdateAbsorb()
     SetupEditMode()
+    ns.Options.Initialize(db, {
+        print = Print,
+        prepare = function() CloseEditMode() end,
+        edit = function() OpenEditMode(); ShowSettings("weakenedSoul") end,
+        toggleEdit = function()
+            if not db.locked or (EditModeManagerFrame and EditModeManagerFrame:IsShown()) then
+                CloseEditMode()
+            else
+                OpenEditMode(); ShowSettings("weakenedSoul")
+            end
+        end,
+        layout = function() Layout(); TickPreview() end,
+    })
 end
 
 local events = CreateFrame("Frame")
@@ -766,6 +787,7 @@ events:SetScript("OnEvent", function(_, event, argument)
         return
     end
     if event == "PLAYER_REGEN_DISABLED" then
+        ns.Options.ClosePicker(); ns.Options.Refresh()
         if editModeActive then EndEditing() else StopPreview() end
         ClearGroupFocus()
         hud:StopMovingOrSizing()
@@ -775,6 +797,7 @@ events:SetScript("OnEvent", function(_, event, argument)
         for _, handle in pairs(handles) do handle:SetScript("OnUpdate", nil); handle:Hide() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         Layout()
+        Appearance.Apply(); ns.Options.Refresh()
         if not db.locked then StartPreview() end
     end
     UpdateAbsorb()
@@ -790,7 +813,9 @@ SlashCmdList.SOULSHIELD = function(message)
         return
     end
     if InCombatLockdown() then Print("Change the layout or preview after combat."); return end
-    if command == "" or command == "edit" or command == "settings" or command == "unlock" then
+    if command == "settings" or command == "options" then
+        ns.Options.Open()
+    elseif command == "" or command == "edit" or command == "unlock" then
         OpenEditMode()
     elseif command == "lock" then
         CloseEditMode()
@@ -823,9 +848,11 @@ SlashCmdList.SOULSHIELD = function(message)
         for group, options in pairs(groupDefaults) do
             for key, value in pairs(options) do db.groupOptions[group][key] = value end
         end
+        db.appearance.style = "liquid"
+        Appearance.Preset("Soul")
         Layout()
         if wasEditing then BeginEditing(editModeActive) end
     else
-        Print("/ss edit | test | calibrate | reset | status")
+        Print("/ss edit | settings | test | calibrate | reset | status")
     end
 end

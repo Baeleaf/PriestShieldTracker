@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  release:
+    types: [published]
+
+concurrency:
+  group: addon-release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -25,19 +31,27 @@ jobs:
         shell: python
         run: |
           import os
+          import re
+          from pathlib import Path
           from scripts.package import package
           version, output = package(os.environ['GITHUB_REF_NAME'])
+          notes = Path('dist/release-notes.md')
+          notes.write_text(re.split(r'^## ', Path('CHANGELOG.md').read_text(), flags=re.M)[1].split('\n', 1)[1].strip() + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-              stream.write(f'version={version}\nasset={output}\n')
+              stream.write(f'version={version}\nasset={output}\nnotes={notes}\n')
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ steps.package.outputs.version }}
           ASSET: ${{ steps.package.outputs.asset }}
+          NOTES: ${{ steps.package.outputs.notes }}
         run: |
-          if [[ "$VERSION" == *-alpha.* || "$VERSION" == *-beta.* ]]; then
-            gh release create "v$VERSION" "$ASSET" --verify-tag --prerelease --title "SoulShield $VERSION" --notes-file CHANGELOG.md
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            gh release upload "v$VERSION" "$ASSET" --clobber
+            gh release edit "v$VERSION" --title "SoulShield $VERSION" --notes-file "$NOTES"
+          elif [[ "$VERSION" == *-alpha.* || "$VERSION" == *-beta.* ]]; then
+            gh release create "v$VERSION" "$ASSET" --verify-tag --prerelease --title "SoulShield $VERSION" --notes-file "$NOTES"
           else
-            gh release create "v$VERSION" "$ASSET" --verify-tag --title "SoulShield $VERSION" --notes-file CHANGELOG.md
+            gh release create "v$VERSION" "$ASSET" --verify-tag --title "SoulShield $VERSION" --notes-file "$NOTES"
           fi

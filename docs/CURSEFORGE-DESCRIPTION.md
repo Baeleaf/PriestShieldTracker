@@ -11,7 +11,7 @@ SoulShield helps priests in **WoW Forever** see how much protection remains, whe
 ## Features
 
 - **Weakened Soul countdown:** See how long until you can shield yourself again.
-- **Remaining protection:** Watch the purple bar and number decrease as your shields absorb damage.
+- **Remaining protection:** Watch the bar and number decrease as your shields absorb damage.
 - **Shield timer:** See how much time is left on Power Word: Shield, even if Weakened Soul is still counting down.
 - **Make it fit your UI:** Move the bars and countdown separately, and adjust text, icon, and bar sizes.
 - **Saved layouts:** Keep your settings for each character across logins and reloads.
@@ -24,6 +24,16 @@ SoulShield helps priests in **WoW Forever** see how much protection remains, whe
 
 Open **Esc > Edit Mode** or type `/ss`. Click either group to change its settings, drag it where you want it, then click **Save**.
 
+## Customization
+
+![SoulShield cycling through Classic, Smooth, and Liquid bars with selected color palettes](https://raw.githubusercontent.com/Baeleaf/SoulShield/main/docs/images/soulshield-customization.gif)
+
+Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **Options > AddOns > SoulShield**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
+
+**Left-click** the minimap shield for settings. **Right-click** to open or close Edit Mode.
+
+*Edited preview with sample values. Shows selected styles and palettes at normal speed, with menu interactions removed.*
+
 ## Usage
 
 Cast **Power Word: Shield** on yourself to see the display. Shield yourself outside combat first so the bar learns what a full shield looks like. The display hides when there is nothing to track.
@@ -34,7 +44,7 @@ Cast **Power Word: Shield** on yourself to see the display. Shield yourself outs
 
 ## Installation
 
-Version **0.2.4** supports **WoW Forever 1.60.1**.
+Version **0.3.0** supports **WoW Forever 1.60.1**.
 
 1. Install SoulShield through the CurseForge app, or download the ZIP from this page.
 2. Extract the **SoulShield** folder into `World of Warcraft/_forever_/Interface/AddOns/`.

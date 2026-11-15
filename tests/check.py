@@ -8,6 +8,8 @@ from lupa.lua51 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "SoulShield.lua").read_text(encoding="utf-8")
+APPEARANCE = (ROOT / "Appearance.lua").read_text(encoding="utf-8")
+OPTIONS = (ROOT / "Options.lua").read_text(encoding="utf-8")
 STUBS = r'''
 frames = {}
 messages = {}
@@ -21,10 +23,11 @@ neverSecret = false
 nativeAvailable = true
 SlashCmdList = {}
 Enum = { SecrecyLevel = { NeverSecret = 0 }, StatusBarTimerDirection = { RemainingTime = 1 },
+    StatusBarInterpolation = { ExponentialEaseOut = 1 },
     LuaCurveType = { Step = 1 }, NumericRuleFormatRounding = { Nearest = 1 } }
 CustomAuraContainerSlotDefaultOptions = {}
 C_AuraContainerUtil = {}
-GameTooltip = { SetOwner = function() end, SetText = function() end,
+GameTooltip = { SetOwner = function() end, SetText = function() end, AddLine = function() end,
     Show = function() end, Hide = function() end }
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, text) table.insert(messages, text) end }
 function UnitClass() return class, class end
@@ -96,6 +99,24 @@ function Frame:GetFrameLevel() return self.level or 1 end
 function Frame:SetMovable(v) end
 function Frame:SetClampedToScreen(v) end
 function Frame:RegisterForDrag(v) end
+function Frame:RegisterForClicks(...) self.clickTypes = {...} end
+function Frame:SetHighlightTexture(value) self.highlight = value end
+function Frame:SetupMenu(generator) self.menuGenerator = generator end
+function Frame:SetDefaultText(text) self.defaultText = text end
+function Frame:GenerateMenu()
+    self.choices = {}
+    local root = { CreateRadio = function(_, text, selected, action)
+        local choice = { text = text, selected = selected, action = action }
+        table.insert(self.choices, choice)
+        return { SetEnabled = function() end }
+    end }
+    self.menuGenerator(self, root)
+end
+function Frame:Choose(text)
+    self:GenerateMenu()
+    for _, choice in ipairs(self.choices) do if choice.text == text then choice.action(); return end end
+    error("Missing dropdown choice: " .. text)
+end
 function Frame:EnableMouse(v) self.mouse = v end
 function Frame:SetScript(event, fn) self.scripts[event] = fn end
 function Frame:GetScript(event) return self.scripts[event] end
@@ -112,18 +133,20 @@ function Frame:SetStatusBarTexture(v)
     self.texture = self:CreateTexture(nil, "ARTWORK")
 end
 function Frame:GetStatusBarTexture() return self.texture end
-function Frame:SetStatusBarColor(...) end
+function Frame:SetStatusBarColor(...) RequireWritable(self); self.barColor = {...} end
 function Frame:SetMinMaxValues(lo, hi) RequireWritable(self); self.minimum = lo; self.maximum = hi end
-function Frame:SetValue(v)
-    RequireWritable(self); self.value = v
+function Frame:SetValue(v, interpolation)
+    RequireWritable(self); self.value = v; self.interpolation = interpolation
     if self.kind == "Slider" and self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, v) end
 end
 function Frame:SetAlpha(value) RequireWritable(self); self.alpha = value end
-function Frame:SetColorTexture(...) end
+function Frame:SetColorTexture(...) self.color = {...} end
+function Frame:SetVertexColor(...) self.vertexColor = {...} end
+function Frame:SetBlendMode(value) self.blend = value end
 function Frame:SetTexture(value) self.asset = value end
 function Frame:SetTexCoord(...) self.texCoord = {...} end
 function Frame:SetFont(font, size, flags) RequireWritable(self); self.fontSize = size end
-function Frame:SetTextColor(...) end
+function Frame:SetTextColor(...) RequireWritable(self); self.textColor = {...} end
 function Frame:SetShadowOffset(...) end
 function Frame:SetJustifyH(value) self.justifyH = value end
 function Frame:SetText(v) self.text = v end
@@ -134,7 +157,10 @@ function Frame:SetFormattedText(fmt, v)
 end
 function Frame:SetShown(v)
     assert(not (self.kind == "AuraContainer" and self.restricted), "Do not toggle a restricted container")
+    local wasShown = self.shown
     self.shown = v
+    if wasShown and not v and self.scripts.OnHide then self.scripts.OnHide(self) end
+    if not wasShown and v and self.scripts.OnShow then self.scripts.OnShow(self) end
 end
 function Frame:Show() self:SetShown(true) end
 function Frame:Hide() self:SetShown(false) end
@@ -192,6 +218,21 @@ function CreateFrame(kind, name, parent, template)
 end
 UIParent = CreateFrame("Frame", "UIParent")
 UIParent:SetSize(1920, 1080)
+Minimap = CreateFrame("Frame", "Minimap", UIParent)
+Minimap:SetSize(140, 140)
+SettingsPanel = CreateFrame("Frame", "SettingsPanel", UIParent)
+SettingsPanel:Hide()
+Settings = { categories = {} }
+function Settings.RegisterCanvasLayoutCategory(canvas, title)
+    local category = { ID = #Settings.categories + 1, name = title, panel = canvas }
+    function category:GetID() return self.ID end
+    canvas:SetParent(SettingsPanel)
+    return category
+end
+function Settings.RegisterAddOnCategory(category) table.insert(Settings.categories, category) end
+function Settings.OpenToCategory(id)
+    Settings.opened = id; SettingsPanel:Show(); Settings.categories[id].panel:Show()
+end
 function Fire(event, argument)
     for _, f in ipairs(frames) do
         if f.events[event] and f.scripts.OnEvent then f.scripts.OnEvent(f, event, argument or "player") end
@@ -211,11 +252,11 @@ function ClickGroup(key)
 end
 function ShowUIPanel(frame)
     frame:Show()
-    if EventRegistry then EventRegistry:TriggerEvent("EditMode.Enter") end
+    if EventRegistry and frame == EditModeManagerFrame then EventRegistry:TriggerEvent("EditMode.Enter") end
 end
 function HideUIPanel(frame)
     frame:Hide()
-    if EventRegistry then EventRegistry:TriggerEvent("EditMode.Exit") end
+    if EventRegistry and frame == EditModeManagerFrame then EventRegistry:TriggerEvent("EditMode.Exit") end
 end
 function EnableNativeEditMode()
     EditModeManagerFrame = CreateFrame("Frame", "EditModeManagerFrame", UIParent)
@@ -247,7 +288,10 @@ def new(setup=""):
     lua = LuaRuntime(unpack_returned_tuples=True)
     lua.execute(STUBS)
     lua.execute(setup)
-    lua.execute(SOURCE, "SoulShield")
+    namespace = lua.table()
+    lua.execute(APPEARANCE, "SoulShield", namespace)
+    lua.execute(OPTIONS, "SoulShield", namespace)
+    lua.execute(SOURCE, "SoulShield", namespace)
     lua.execute('''Fire("PLAYER_LOGIN"); hud = SoulShieldHUD
 for _, f in ipairs(frames) do
     if f.parts then sample = f end
@@ -600,11 +644,7 @@ assert(label.fontSize == 30 and ws.durationText.fontSize == 33.75)
 assert(label.points[1][4] == -51)
 assert(sample.readyIcon.width == 42 and sample.readyIcon.points[1][3] == "RIGHT")
 assert(sample.readyIcon.points[1][4] == 9)
-controls.showIcon:SetChecked(false); controls.showIcon.scripts.OnClick(controls.showIcon)
-assert(not sample.readyIcon.shown and not sample.readyCross.shown)
-assert(label.points[1][4] == 0)
-controls.showIcon:SetChecked(true); controls.showIcon.scripts.OnClick(controls.showIcon)
-assert(sample.readyIcon.shown and sample.readyCross.shown)
+assert(controls.showIcon == nil and SoulShieldEditSettings.appearanceButton == nil)
 ''')
 case("clicking absorb group selects independent size and text controls", "EnableNativeEditMode()", r'''
 Command("edit")
@@ -689,4 +729,248 @@ assert(not panel:IsShown() and not SoulShieldDB.locked and EditModeManagerFrame:
 ClickGroup("weakenedSoul"); assert(panel:IsShown())
 Fire("GLOBAL_MOUSE_DOWN", "RightButton"); assert(not panel:IsShown())
 ''')
-print("34 logic checks passed; live client validation remains required.")
+case("liquid animates with opaque combat values without inspecting fill geometry", "", r'''
+absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+bar.texture.GetWidth = function() error("Cannot measure secret fill") end
+bar.texture.GetHeight = function() error("Cannot measure secret fill") end
+combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
+local fx = bar.liquid
+local before = fx.clock
+for i = 1, 40 do Tick(0.04) end
+assert(fx.clock > before and rawequal(bar.value, secret))
+assert(bar.barColor[4] == 0 and fx.clip.shown)
+assert(fx.mover.points[1][2] == bar.texture)
+absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED"); Tick(0.04)
+assert(not fx.clip:IsRendered())
+assert(SoulShieldDB.reference == 1100)
+''')
+case("styles switch native smoothing and remove liquid while preserving live amount", "", r'''
+Command("settings")
+local panel = SoulShieldOptions
+panel.style:Choose("Smooth")
+Command("lock"); absorb = 600; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+assert(bar.value == 600 and bar.interpolation == 1 and not bar.liquid.clip.shown and bar.barColor[4] == 1)
+Command("settings")
+panel.style:Choose("Classic")
+Command("lock"); Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+assert(bar.value == 600 and bar.interpolation == nil and not bar.liquid.clip.shown)
+''')
+case("palette colors reach preview live bars and native aura-owned text", "", r'''
+Command("settings")
+SoulShieldOptions.palette:Choose("Holy")
+assert(SoulShieldDB.appearance.preset == "Holy")
+assert(bar.liquid.rows[1].body.vertexColor[1] == 0.95)
+assert(sample.absorb.liquid.rows[1].body.vertexColor[1] == 0.95)
+local shield = Find("AuraContainer").slots.shield.button
+assert(shield.durationBar.barColor[1] == 1 and shield.durationBar.barColor[2] == 0.84)
+assert(FindText(shield, "Shield expires in").textColor[3] == 0.77)
+assert(sample.ws.textColor[2] == 0.88)
+''')
+case("color picker edits all text while layout is locked and restores on cancel", "", r'''
+ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
+function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
+function ColorPickerFrame:GetColorRGB() return 0.2, 0.3, 0.4 end
+Command("settings")
+SoulShieldOptions.textColor.scripts.OnClick()
+ColorPickerFrame.info.swatchFunc()
+assert(bar.amountText.textColor[1] == 0.2 and sample.time.textColor[2] == 0.3)
+assert(SoulShieldDB.appearance.preset == "Custom")
+ColorPickerFrame.mouseOver = true; Fire("GLOBAL_MOUSE_DOWN", "LeftButton")
+assert(SoulShieldOptions:IsVisible() and SoulShieldDB.locked)
+ColorPickerFrame.info.cancelFunc()
+assert(bar.amountText.textColor[1] == 1 and SoulShieldDB.appearance.preset == "Soul")
+SoulShieldOptions:Hide()
+assert(not ColorPickerFrame.shown and not SoulShieldOptions.shown)
+''')
+case("combat disables options and closes picker ignoring late callbacks", "", r'''
+ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
+function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
+function ColorPickerFrame:GetColorRGB() return 0, 0, 0 end
+Command("settings")
+SoulShieldOptions.textColor.scripts.OnClick()
+combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
+ColorPickerFrame.info.swatchFunc(); ColorPickerFrame.info.cancelFunc()
+assert(not SoulShieldOptions.style.enabled and not ColorPickerFrame.shown)
+assert(SoulShieldDB.appearance.colors.ready[1] == 0.94)
+for i = 1, 30 do Tick(0.05) end
+''')
+case("invalid saved appearance repairs channels and preserves layout", '''
+SoulShieldDB = { width = 320, appearance = { style = "broken", preset = false,
+    colors = { absorb = { 2, 0, 0 }, duration = { 0/0, 0, 0 }, numbers = { 0.1, 0.2, 0.3 } } } }
+''', r'''
+assert(SoulShieldDB.appearance.style == "liquid" and SoulShieldDB.appearance.preset == "Soul")
+assert(bar.width == 320 and bar.amountText.textColor[3] == 0.3)
+assert(SoulShieldDB.appearance.colors.absorb[1] == 0.55)
+assert(SoulShieldDB.appearance.colors.duration[1] == 0.63)
+''')
+case("liquid resizes without reallocating texture pools during animation", "", r'''
+Command("edit"); ClickGroup("shield")
+SoulShieldEditSettings.controls.width:SetValue(400)
+SoulShieldEditSettings.controls.barHeight:SetValue(40)
+SoulShieldEditSettings.controls.groupScale:SetValue(150)
+assert(bar.liquid.width == 600 and sample.absorb.liquid.height == 60)
+local count = #frames
+for i = 1, 1000 do Tick(0.04) end
+assert(#frames == count)
+''')
+case("saved custom palette and style restore without starting preview", '''
+SoulShieldDB = { appearance = { style = "smooth", preset = "Custom", colors = {
+    ready = { 0.1, 0.2, 0.3 }, cross = { 0.6, 0.5, 0.4 } } } }
+''', r'''
+assert(SoulShieldDB.locked and not sample:IsVisible() and not bar.liquid.clip.shown)
+assert(sample.ws.textColor[1] == 0.1 and sample.readyCross.textColor[3] == 0.4)
+assert(bar.interpolation == 1)
+''')
+case("login during combat initializes selected colors without protected restyling", '''
+combat = true; absorb = secret
+SoulShieldDB = { appearance = { style = "classic", colors = { absorb = { 0.1, 0.7, 0.2 } } } }
+''', r'''
+assert(not bar.liquid.clip.shown and bar.barColor[2] == 0.7 and bar.barColor[4] == 1)
+assert(rawequal(bar.value, secret))
+combat = false; absorb = 0; Fire("PLAYER_REGEN_ENABLED")
+assert(not bar.liquid.clip.shown)
+''')
+case("clients without native interpolation retain working fill and preview", "Enum.StatusBarInterpolation = nil", r'''
+absorb = secret; Fire("UNIT_ABSORB_AMOUNT_CHANGED"); Tick(0.04)
+assert(rawequal(bar.value, secret) and bar.interpolation == nil)
+Command("test"); Tick(0.04)
+assert(sample:IsVisible() and sample.absorb.interpolation == nil)
+''')
+case("minimap left click opens registered AddOns category and exits layout editing", "EnableNativeEditMode()", r'''
+assert(#Settings.categories == 1 and Settings.categories[1].name == "SoulShield")
+assert(not SettingsPanel:IsVisible() and not SoulShieldOptions:IsVisible())
+Command("edit"); ClickGroup("shield")
+SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "LeftButton")
+assert(Settings.opened == Settings.categories[1]:GetID() and SoulShieldOptions:IsVisible())
+assert(SoulShieldDB.locked and not EditModeManagerFrame:IsVisible() and not sample:IsVisible())
+assert(SoulShieldAppearance == nil and SoulShieldEditSettings.appearanceButton == nil)
+''')
+case("minimap right click opens Edit Mode focused on Shield Ready", "EnableNativeEditMode()", r'''
+Command("settings")
+SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "RightButton")
+assert(EditModeManagerFrame:IsShown() and not SettingsPanel:IsShown())
+assert(not SoulShieldDB.locked and SoulShieldEditSettings:IsVisible())
+assert(SoulShieldEditSettings.subtitle.text == "Shield Ready")
+assert(SoulShieldEditSettings.controls.fontSize:IsVisible() and SoulShieldEditSettings.controls.iconSize:IsVisible())
+assert(not SoulShieldEditSettings.controls.width:IsVisible())
+assert(SoulShieldEditSettings.controls.showIcon == nil and SoulShieldEditSettings.appearanceButton == nil)
+for _, f in ipairs(frames) do
+    if f.groupKey == "weakenedSoul" then assert(f.selection.color[4] == 0.36) end
+end
+''')
+case("minimap launcher and stale dropdown actions cannot edit in combat", "EnableNativeEditMode()", r'''
+Command("settings")
+SoulShieldOptions.style:GenerateMenu()
+local action = SoulShieldOptions.style.choices[1].action
+combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
+action()
+assert(SoulShieldDB.appearance.style == "liquid" and not SoulShieldOptions.style.enabled)
+SettingsPanel:Hide()
+SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "LeftButton")
+SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "RightButton")
+assert(not SettingsPanel:IsVisible() and not EditModeManagerFrame:IsShown() and SoulShieldDB.locked)
+combat = false; absorb = 0; Fire("PLAYER_REGEN_ENABLED")
+assert(SoulShieldOptions.style.enabled and SoulShieldOptions.textColor.enabled)
+''')
+case("minimap dragging saves angle without opening a menu", "", r'''
+local button = SoulShieldMinimapButton
+local before = SoulShieldDB.minimapAngle
+cursorX, cursorY = 1240, 760
+button.scripts.OnDragStart(); button.scripts.OnUpdate(); button.scripts.OnDragStop()
+assert(SoulShieldDB.minimapAngle ~= before and not button.scripts.OnUpdate)
+button.scripts.OnClick(button, "LeftButton")
+assert(SoulShieldDB.locked and SoulShieldEditSettings == nil)
+button.scripts.OnMouseDown(); button.scripts.OnClick(button, "RightButton")
+assert(not SoulShieldDB.locked and SoulShieldEditSettings.subtitle.text == "Shield Ready")
+''')
+case("minimap restores saved position and repairs invalid angles", "SoulShieldDB = { minimapAngle = 30 }", r'''
+assert(SoulShieldDB.minimapAngle == 30)
+assert(math.abs(SoulShieldMinimapButton.points[1][5] - 39) < 0.001)
+''')
+case("icon visibility lives in Options and layout reset preserves it", "EnableNativeEditMode()", r'''
+Command("settings")
+local check = SoulShieldOptions.showIcon
+check:SetChecked(false); check.scripts.OnClick(check)
+assert(not SoulShieldDB.groupOptions.weakenedSoul.showIcon)
+SoulShieldOptions.editButton.scripts.OnClick()
+assert(not sample.readyIcon.shown and not sample.readyCross.shown)
+SoulShieldEditSettings.resetButton.scripts.OnClick()
+assert(not SoulShieldDB.groupOptions.weakenedSoul.showIcon and not sample.readyIcon.shown)
+Command("settings"); check:SetChecked(true); check.scripts.OnClick(check)
+SoulShieldOptions.editButton.scripts.OnClick()
+assert(sample.readyIcon.shown and sample.readyCross.shown)
+''')
+case("simplified bar color edits both bars and Cancel restores their distinct colors", "", r'''
+ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
+function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
+function ColorPickerFrame:GetColorRGB() return 0.2, 0.7, 0.4 end
+Command("settings"); SoulShieldOptions.barColor.scripts.OnClick()
+ColorPickerFrame.info.swatchFunc()
+local colors = SoulShieldDB.appearance.colors
+assert(colors.absorb[2] == 0.7 and colors.duration[2] == 0.7)
+assert(colors.labels[1] == 0.9 and colors.background[1] == 0.035)
+ColorPickerFrame.info.cancelFunc()
+assert(colors.absorb[1] == 0.55 and colors.duration[1] == 0.63 and SoulShieldDB.appearance.preset == "Soul")
+SoulShieldOptions.barColor.scripts.OnClick()
+local stale = ColorPickerFrame.info.swatchFunc
+SoulShieldOptions:Hide(); stale()
+assert(colors.absorb[1] == 0.55)
+''')
+case("appearance reset preserves sizes positions and reference", "", r'''
+absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+Command("width 390"); Command("settings")
+SoulShieldDB.groups.shield.x = 75
+SoulShieldDB.groupOptions.weakenedSoul.fontSize = 22
+SoulShieldOptions.style:Choose("Classic"); SoulShieldOptions.palette:Choose("Holy")
+SoulShieldOptions.resetButton.scripts.OnClick()
+assert(SoulShieldDB.width == 390 and SoulShieldDB.groups.shield.x == 75)
+assert(SoulShieldDB.groupOptions.weakenedSoul.fontSize == 22 and SoulShieldDB.reference == 1100)
+assert(SoulShieldDB.appearance.style == "liquid" and SoulShieldDB.appearance.preset == "Soul")
+''')
+case("settings preview uses sample values without modifying live shield reference", "", r'''
+absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+absorb = 600; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+Command("settings")
+assert(SoulShieldOptions.previewAbsorb ~= bar and not SoulShieldOptions.previewAbsorb.nativeOwned)
+for i = 1, 100 do Tick(0.1) end
+assert(bar.value == 600 and bar.maximum == 1100 and SoulShieldDB.reference == 1100)
+assert(SoulShieldOptions.previewAbsorb.value >= 500 and SoulShieldOptions.previewAbsorb.value <= 1400)
+''')
+case("missing Settings or Minimap APIs leave the tracker and slash editor working", "Settings = nil; Minimap = nil", r'''
+assert(hud and SoulShieldOptions == nil and SoulShieldMinimapButton == nil)
+Command("edit"); assert(sample:IsVisible())
+Command("lock"); Command("settings")
+assert(SoulShieldDB.locked and #messages == 1)
+''')
+case("right click toggles native Edit Mode closed and can open it again", "EnableNativeEditMode()", r'''
+local button = SoulShieldMinimapButton
+button.scripts.OnClick(button, "RightButton")
+assert(not SoulShieldDB.locked and SoulShieldEditSettings.subtitle.text == "Shield Ready")
+ClickGroup("shield")
+button.scripts.OnClick(button, "RightButton")
+assert(SoulShieldDB.locked and not EditModeManagerFrame:IsVisible())
+assert(not SoulShieldEditSettings:IsVisible() and not sample:IsVisible())
+button.scripts.OnClick(button, "RightButton")
+assert(not SoulShieldDB.locked and EditModeManagerFrame:IsVisible())
+assert(SoulShieldEditSettings.subtitle.text == "Shield Ready")
+''')
+case("right click toggles fallback and externally opened Edit Mode", "", r'''
+local button = SoulShieldMinimapButton
+Command("edit"); ClickGroup("shield")
+button.scripts.OnClick(button, "RightButton")
+assert(SoulShieldDB.locked and not sample:IsVisible() and not SoulShieldEditSettings:IsVisible())
+button.scripts.OnClick(button, "RightButton")
+assert(not SoulShieldDB.locked and SoulShieldEditSettings.subtitle.text == "Shield Ready")
+button.scripts.OnClick(button, "RightButton")
+assert(SoulShieldDB.locked)
+''')
+case("palette dropdown contains six working presets without a Custom option", "", r'''
+Command("settings"); SoulShieldOptions.palette:GenerateMenu()
+assert(#SoulShieldOptions.palette.choices == 6)
+for _, choice in ipairs(SoulShieldOptions.palette.choices) do assert(choice.text ~= "Custom") end
+SoulShieldOptions.palette:Choose("Holy")
+assert(SoulShieldDB.appearance.preset == "Holy")
+SoulShieldOptions.palette:Choose("Emerald")
+assert(SoulShieldDB.appearance.preset == "Emerald")
+''')
+print("57 logic checks passed; live client validation remains required.")
