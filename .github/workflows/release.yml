@@ -1,0 +1,43 @@
+name: Publish addon release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check addon logic
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python tests/check.py
+      - name: Build and verify installable ZIP
+        id: package
+        shell: python
+        run: |
+          import os
+          from scripts.package import package
+          version, output = package(os.environ['GITHUB_REF_NAME'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write(f'version={version}\nasset={output}\n')
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.package.outputs.version }}
+          ASSET: ${{ steps.package.outputs.asset }}
+        run: |
+          if [[ "$VERSION" == *-alpha.* || "$VERSION" == *-beta.* ]]; then
+            gh release create "v$VERSION" "$ASSET" --verify-tag --prerelease --title "SoulShield $VERSION" --notes-file CHANGELOG.md
+          else
+            gh release create "v$VERSION" "$ASSET" --verify-tag --title "SoulShield $VERSION" --notes-file CHANGELOG.md
+          fi
