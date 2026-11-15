@@ -24,6 +24,18 @@ SoulShield helps priests in **WoW Forever** see how much protection remains, whe
 
 Open **Esc > Edit Mode** or type `/ss`. Click either group to change its settings, drag it where you want it, then click **Save**.
 
+## Customization
+
+*Coming in the next update.*
+
+![SoulShield cycling through Classic, Smooth, and Liquid bars with selected color palettes](docs/images/soulshield-customization.gif)
+
+Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **Options > AddOns > SoulShield**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
+
+**Left-click** the minimap shield for settings. **Right-click** to open or close Edit Mode.
+
+*Edited preview with sample values. Shows selected styles and palettes at normal speed, with menu interactions removed.*
+
 ## Usage
 
 Cast **Power Word: Shield** on yourself to see the display. Shield yourself outside combat first so the bar learns what a full shield looks like. The display hides when there is nothing to track.
