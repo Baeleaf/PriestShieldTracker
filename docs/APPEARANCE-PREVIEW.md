@@ -1,20 +1,20 @@
 # Appearance settings
 
-These appearance controls are included in SoulShield 0.3.0 for WoW Forever 1.60.1.
+These appearance controls are included in PriestShieldTracker 0.3.0 for WoW Forever 1.60.1.
 
 Restart WoW once if this is your first installation of the bundled liquid textures.
-For this settings update, reload the UI. Open **Options > AddOns > SoulShield** or
-use `/ss settings`. The appearance page includes a live sample with sample values;
+For this settings update, reload the UI. Open **Options > AddOns > PriestShieldTracker** or
+use `/pst settings`. The appearance page includes a live sample with sample values;
 it does not replace your actual shield tracking.
 
 The minimap shield button provides two shortcuts:
 
-- **Left-click:** open SoulShield in Options > AddOns.
+- **Left-click:** open PriestShieldTracker in Options > AddOns.
 - **Right-click:** toggle Edit Mode. Opening selects **Shield Ready**; clicking
   again closes Edit Mode, including if a different group is selected.
 - **Drag:** move the button around the minimap. Its position saves per character.
 
-Open `/ss` to enter Edit Mode. Click a display group to adjust its size, font size,
+Open `/pst` to enter Edit Mode. Click a display group to adjust its size, font size,
 and either icon size or bar dimensions, then click **Save**. Appearance controls
 and the icon visibility toggle live in the AddOns options only.
 
@@ -42,7 +42,7 @@ color. It does not receive liquid effects.
 Liquid textures are bundled, so neither Smooth addon is required. The generated
 Swirl, Nebula, Core, Bubble, and Edge textures come from Smooth Animated Bars by
 Jordan under MIT; the notice is retained in `licenses/SmoothAnimatedBars.txt`.
-The renderer here is a small SoulShield implementation, inspired by the native
+The renderer here is a small PriestShieldTracker implementation, inspired by the native
 fill anchoring used by Smooth Animated Bars and Smooth Experience Bar.
 
 Before release, check both minimap click shortcuts, the AddOns page, dragging the

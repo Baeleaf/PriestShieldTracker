@@ -7,7 +7,8 @@ from pathlib import Path
 from lupa.lua51 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / "SoulShield.lua").read_text(encoding="utf-8")
+SOURCE = (ROOT / "PriestShieldTracker.lua").read_text(encoding="utf-8")
+COMPATIBILITY = (ROOT / "Compatibility.lua").read_text(encoding="utf-8")
 APPEARANCE = (ROOT / "Appearance.lua").read_text(encoding="utf-8")
 OPTIONS = (ROOT / "Options.lua").read_text(encoding="utf-8")
 STUBS = r'''
@@ -243,7 +244,7 @@ function Find(kind, parent)
         if f.kind == kind and (not parent or f.parent == parent) then return f end
     end
 end
-function Command(text) SlashCmdList.SOULSHIELD(text) end
+function Command(text) SlashCmdList.PRIESTSHIELDTRACKER(text) end
 function ClickGroup(key)
     for _, frame in ipairs(frames) do
         if frame.groupKey == key then frame.scripts.OnMouseUp(frame, "LeftButton"); return end
@@ -289,10 +290,11 @@ def new(setup=""):
     lua.execute(STUBS)
     lua.execute(setup)
     namespace = lua.table()
-    lua.execute(APPEARANCE, "SoulShield", namespace)
-    lua.execute(OPTIONS, "SoulShield", namespace)
-    lua.execute(SOURCE, "SoulShield", namespace)
-    lua.execute('''Fire("PLAYER_LOGIN"); hud = SoulShieldHUD
+    lua.execute(COMPATIBILITY, "PriestShieldTracker", namespace)
+    lua.execute(APPEARANCE, "PriestShieldTracker", namespace)
+    lua.execute(OPTIONS, "PriestShieldTracker", namespace)
+    lua.execute(SOURCE, "PriestShieldTracker", namespace)
+    lua.execute('''Fire("PLAYER_LOGIN"); hud = PriestShieldTrackerHUD
 for _, f in ipairs(frames) do
     if f.parts then sample = f end
     if f.kind == "StatusBar" and f.absorbLabel and not f.parent.parts then bar = f end
@@ -328,7 +330,7 @@ case("absorption depletion preserves full reference", "", r'''
 absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 absorb = 700; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(bar.maximum == 1100 and bar.value == 700)
-assert(SoulShieldDB.reference == 1100)
+assert(PriestShieldTrackerDB.reference == 1100)
 absorb = 0; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(bar.value == 0 and bar.maximum == 1100)
 absorb = 800; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
@@ -339,16 +341,16 @@ absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 combat = true; Fire("PLAYER_REGEN_DISABLED")
 absorb = secret; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(rawequal(bar.value, secret))
-assert(SoulShieldDB.reference == 1100)
+assert(PriestShieldTrackerDB.reference == 1100)
 combat = false; absorb = 600; Fire("PLAYER_REGEN_ENABLED")
 assert(bar.maximum == 1100 and bar.value == 600)
 ''')
 case("login during combat without calibration", "absorb = secret; combat = true", r'''
 assert(rawequal(bar.value, secret))
 assert(bar.maximum == 2400)
-assert(SoulShieldDB.reference == nil)
+assert(PriestShieldTrackerDB.reference == nil)
 ''')
-case("active shield on reload retains calibration", "SoulShieldDB = { reference = 1100 }; absorb = 500", r'''
+case("active shield on reload retains calibration", "PriestShieldTrackerDB = { reference = 1100 }; absorb = 500", r'''
 assert(bar.maximum == 1100 and bar.value == 500)
 ''')
 case("preview restores live values and reference", "", r'''
@@ -372,14 +374,14 @@ assert(hud.mouse)
 ''')
 case("scaled drag and saved layout", "", r'''
 Command("scale 1.5"); Command("unlock"); hud.scripts.OnDragStop(hud)
-assert(SoulShieldDB.x == 560 and SoulShieldDB.y == 340)
+assert(PriestShieldTrackerDB.x == 560 and PriestShieldTrackerDB.y == 340)
 Command("width 310"); assert(hud.width == 310)
 Command("scale 99"); assert(hud.scale == 1.5)
 Command("reset"); assert(hud.scale == 1 and hud.width == 260 and hud.mouse)
 Command("lock"); assert(not hud.mouse)
 ''')
 case("non-priest has no HUD", 'class = "MAGE"', r'''
-assert(SoulShieldHUD == nil)
+assert(PriestShieldTrackerHUD == nil)
 Command("test")
 assert(#messages == 1)
 ''')
@@ -391,8 +393,8 @@ Command("status"); assert(#messages == 2)
 ''')
 first = new()
 first.execute('Command("scale 1.3"); Command("width 320"); Command("unlock")')
-saved = dict(first.globals().SoulShieldDB.items())
-second = new("SoulShieldDB = {scale = %s, width = %s, locked = false}" % (saved["scale"], saved["width"]))
+saved = dict(first.globals().PriestShieldTrackerDB.items())
+second = new("PriestShieldTrackerDB = {scale = %s, width = %s, locked = false}" % (saved["scale"], saved["width"]))
 second.execute('assert(hud.scale == 1.3 and hud.width == 320 and hud.mouse == false and not sample:IsVisible())')
 print("PASS settings persist across reload")
 case("native shield visibility and independent debuff", "", r'''
@@ -422,7 +424,7 @@ assert(count == 2 and handle.shown and sample:IsVisible())
 cursorX, cursorY = 100, 100; handle.scripts.OnDragStart(handle)
 cursorX, cursorY = 145, 70; handle.scripts.OnUpdate()
 handle.scripts.OnDragStop(handle)
-assert(SoulShieldDB.groups.shield.x == 30 and SoulShieldDB.groups.shield.y == -20)
+assert(PriestShieldTrackerDB.groups.shield.x == 30 and PriestShieldTrackerDB.groups.shield.y == -20)
 assert(bar.points[1][4] == 30 and bar.points[1][5] == -47)
 local ct = Find("AuraContainer")
 local duration = ct.slots.shield.button.durationBar
@@ -430,7 +432,7 @@ local shieldTime = ct.slots.shield.button.durationText
 assert(duration.points[1][4] == 30 and duration.points[1][5] == -68)
 assert(shieldTime.points[1][4] == 30 and shieldTime.points[1][5] == -76)
 assert(bar.absorbLabel.points[1][2] == bar and bar.absorbLabel.points[1][4] == 6)
-assert(SoulShieldDB.groups.weakenedSoul.x == 0)
+assert(PriestShieldTrackerDB.groups.weakenedSoul.x == 0)
 cursorX, cursorY = 0, 0; debuffHandle.scripts.OnDragStart(debuffHandle)
 cursorX, cursorY = -30, 60; debuffHandle.scripts.OnUpdate()
 debuffHandle.scripts.OnDragStop(debuffHandle)
@@ -438,11 +440,11 @@ local ws = ct.slots.weakenedSoul.button
 local label = FindText(ws, "Shield Ready")
 assert(label.points[1][4] == -46 and label.points[1][5] == 27)
 assert(ws.durationText.points[1][4] == -208 and ws.durationText.points[1][5] == 27)
-assert(SoulShieldDB.groups.shield.x == 30)
+assert(PriestShieldTrackerDB.groups.shield.x == 30)
 assert(ct.slots.weakenedSoul.button.durationText.parent == ct.slots.weakenedSoul.button)
 assert(ct.slots.shield.button.durationText.parent == ct.slots.shield.button)
 Command("lock"); assert(not handle.shown and not bar.nativeOwned)
-Command("reset"); assert(SoulShieldDB.groups.shield.x == 0)
+Command("reset"); assert(PriestShieldTrackerDB.groups.shield.x == 0)
 ''')
 case("combat interrupts component drag and restores edit mode", "", r'''
 Command("unlock")
@@ -462,7 +464,7 @@ absorb = 500; Fire("UNIT_ABSORB_AMOUNT_CHANGED"); assert(bar:IsRendered())
 absorb = 0; Fire("UNIT_ABSORB_AMOUNT_CHANGED"); assert(not bar:IsRendered())
 ''')
 case("saved group positions restore to native and preview regions", '''
-SoulShieldDB = { groups = { weakenedSoul = { x = 35, y = -20 },
+PriestShieldTrackerDB = { groups = { weakenedSoul = { x = 35, y = -20 },
     shield = { x = -40, y = -15 } } }
 ''', r'''
 local ct = Find("AuraContainer")
@@ -512,12 +514,12 @@ shield:Hide(); absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(not bar:IsRendered() and ws:IsVisible() and timer:IsVisible())
 ''')
 case("login locks old edit state and migrates group positions", '''
-SoulShieldDB = { locked = false, positions = {
+PriestShieldTrackerDB = { locked = false, positions = {
     weakenedLabel = { x = 35, y = -10 }, weakenedTime = { x = 120, y = 70 },
     absorb = { x = -40, y = -15 }, shieldTime = { x = 100, y = 80 } } }
 ''', r'''
-assert(SoulShieldDB.locked and not sample:IsVisible() and not bar:IsRendered())
-assert(SoulShieldDB.positions == nil)
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible() and not bar:IsRendered())
+assert(PriestShieldTrackerDB.positions == nil)
 local ct = Find("AuraContainer")
 local ws, shield = ct.slots.weakenedSoul.button, ct.slots.shield.button
 local label = FindText(ws, "Shield Ready")
@@ -566,7 +568,7 @@ Command("unlock"); combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
 local reduced = setmetatable({ secret = true }, getmetatable(secret))
 absorb = reduced; Tick(0.1)
 assert(rawequal(bar.value, reduced) and rawequal(bar.amountText.formattedValue, reduced))
-assert(SoulShieldDB.reference == 158 and not sample:IsVisible())
+assert(PriestShieldTrackerDB.reference == 158 and not sample:IsVisible())
 combat = false; absorb = 20; Fire("PLAYER_REGEN_ENABLED")
 assert(sample:IsVisible() and sample.absorb.value == 1100 and bar.value == 20)
 absorb = 12; Tick(0.1); assert(bar.value == 12 and sample.absorb.value == 1100)
@@ -611,47 +613,47 @@ assert(gate.width == 320 and bar.width == 320)
 ''')
 case("native Edit Mode opens settings and closing it clears previews", "EnableNativeEditMode()", r'''
 ShowUIPanel(EditModeManagerFrame)
-assert(not SoulShieldDB.locked and sample:IsVisible() and SoulShieldEditSettings == nil)
+assert(not PriestShieldTrackerDB.locked and sample:IsVisible() and PriestShieldTrackerEditSettings == nil)
 ClickGroup("weakenedSoul")
-assert(SoulShieldEditSettings:IsVisible())
+assert(PriestShieldTrackerEditSettings:IsVisible())
 local buttons = 0
 for _, frame in ipairs(frames) do
-    if frame.parent == SoulShieldEditSettings and frame.kind == "Button" then buttons = buttons + 1 end
+    if frame.parent == PriestShieldTrackerEditSettings and frame.kind == "Button" then buttons = buttons + 1 end
 end
-assert(buttons == 2 and SoulShieldEditSettings.saveButton.text == "Save")
-assert(SoulShieldEditSettings.controls.iconSize:IsVisible())
-assert(not SoulShieldEditSettings.controls.width:IsVisible())
+assert(buttons == 2 and PriestShieldTrackerEditSettings.saveButton.text == "Save")
+assert(PriestShieldTrackerEditSettings.controls.iconSize:IsVisible())
+assert(not PriestShieldTrackerEditSettings.controls.width:IsVisible())
 HideUIPanel(EditModeManagerFrame)
-assert(SoulShieldDB.locked and not sample:IsVisible() and not SoulShieldEditSettings:IsVisible())
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible() and not PriestShieldTrackerEditSettings:IsVisible())
 Command("edit"); assert(EditModeManagerFrame:IsShown() and sample:IsVisible())
-assert(not SoulShieldEditSettings:IsVisible())
+assert(not PriestShieldTrackerEditSettings:IsVisible())
 ClickGroup("shield")
-assert(SoulShieldEditSettings.subtitle.text == "Absorb display")
-SoulShieldEditSettings.saveButton.scripts.OnClick()
-assert(not EditModeManagerFrame:IsShown() and SoulShieldDB.locked)
+assert(PriestShieldTrackerEditSettings.subtitle.text == "Absorb display")
+PriestShieldTrackerEditSettings.saveButton.scripts.OnClick()
+assert(not EditModeManagerFrame:IsShown() and PriestShieldTrackerDB.locked)
 ''')
 case("Edit Mode adjusts ready group scale fonts and right-side icon", "EnableNativeEditMode()", r'''
 Command("edit")
 ClickGroup("weakenedSoul")
-local controls = SoulShieldEditSettings.controls
+local controls = PriestShieldTrackerEditSettings.controls
 controls.groupScale:SetValue(150)
 controls.fontSize:SetValue(20)
 controls.iconSize:SetValue(28)
-assert(SoulShieldDB.groupOptions.weakenedSoul.scale == 1.5)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.scale == 1.5)
 local ws = Find("AuraContainer").slots.weakenedSoul.button
 local label = FindText(ws, "Shield Ready")
 assert(label.fontSize == 30 and ws.durationText.fontSize == 33.75)
 assert(label.points[1][4] == -51)
 assert(sample.readyIcon.width == 42 and sample.readyIcon.points[1][3] == "RIGHT")
 assert(sample.readyIcon.points[1][4] == 9)
-assert(controls.showIcon == nil and SoulShieldEditSettings.appearanceButton == nil)
+assert(controls.showIcon == nil and PriestShieldTrackerEditSettings.appearanceButton == nil)
 ''')
 case("clicking absorb group selects independent size and text controls", "EnableNativeEditMode()", r'''
 Command("edit")
 local shieldHandle
 for _, f in ipairs(frames) do if f.groupKey == "shield" then shieldHandle = f end end
 shieldHandle.scripts.OnMouseUp(shieldHandle, "LeftButton")
-local controls = SoulShieldEditSettings.controls
+local controls = PriestShieldTrackerEditSettings.controls
 assert(controls.width:IsVisible() and controls.barHeight:IsVisible() and not controls.iconSize:IsVisible())
 controls.width:SetValue(350); controls.barHeight:SetValue(28)
 controls.groupScale:SetValue(125); controls.fontSize:SetValue(14)
@@ -663,26 +665,26 @@ assert(shield.durationBar.width == 437.5 and shield.durationBar.height == 3.75)
 assert(shield.durationBar.points[1][5] == -64.5)
 assert(shield.durationText.points[1][5] == -74.5)
 assert(bar.amountText.fontSize == 17.5)
-assert(SoulShieldDB.groupOptions.weakenedSoul.scale == 1 and sample.ws.fontSize == 16)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.scale == 1 and sample.ws.fontSize == 16)
 ''')
 case("native combat entry closes editor without protected writes or reopening", "EnableNativeEditMode()", r'''
-Command("edit"); ClickGroup("weakenedSoul"); SoulShieldEditSettings.controls.fontSize:SetValue(19)
+Command("edit"); ClickGroup("weakenedSoul"); PriestShieldTrackerEditSettings.controls.fontSize:SetValue(19)
 combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
-assert(SoulShieldDB.locked and not sample:IsVisible() and not SoulShieldEditSettings:IsVisible())
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible() and not PriestShieldTrackerEditSettings:IsVisible())
 HideUIPanel(EditModeManagerFrame)
 for i = 1, 200 do Tick(0.1) end
 assert(rawequal(bar.value, secret))
 combat = false; absorb = 0; Fire("PLAYER_REGEN_ENABLED")
-assert(not sample:IsVisible() and not SoulShieldEditSettings:IsVisible() and not hud.mouse)
-assert(SoulShieldDB.groupOptions.weakenedSoul.fontSize == 19)
+assert(not sample:IsVisible() and not PriestShieldTrackerEditSettings:IsVisible() and not hud.mouse)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.fontSize == 19)
 ''')
 case("saved group settings restore locked with scaled fonts and icon preference", '''
-SoulShieldDB = { width = 350, barHeight = 28, groupOptions = {
+PriestShieldTrackerDB = { width = 350, barHeight = 28, groupOptions = {
     weakenedSoul = { scale = 1.5, fontSize = 20, iconSize = 28, showIcon = false },
     shield = { scale = 1.25, fontSize = 14 } } }
 EnableNativeEditMode()
 ''', r'''
-assert(SoulShieldDB.locked and not sample:IsVisible() and SoulShieldEditSettings == nil)
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible() and PriestShieldTrackerEditSettings == nil)
 assert(sample.ws.fontSize == 30 and not sample.readyIcon.shown)
 assert(bar.width == 437.5 and bar.height == 35 and bar.amountText.fontSize == 17.5)
 Command("edit"); assert(not sample.readyIcon.shown and not sample.readyCross.shown)
@@ -690,23 +692,23 @@ Command("edit"); assert(not sample.readyIcon.shown and not sample.readyCross.sho
 case("reset group restores only its layout and appearance", "EnableNativeEditMode()", r'''
 Command("edit")
 ClickGroup("weakenedSoul")
-SoulShieldEditSettings.controls.fontSize:SetValue(22)
-SoulShieldDB.groups.weakenedSoul.x = 25
+PriestShieldTrackerEditSettings.controls.fontSize:SetValue(22)
+PriestShieldTrackerDB.groups.weakenedSoul.x = 25
 local handle
 for _, f in ipairs(frames) do if f.groupKey == "shield" then handle = f end end
 handle.scripts.OnMouseUp(handle, "LeftButton")
-SoulShieldEditSettings.controls.width:SetValue(400)
-SoulShieldEditSettings.controls.groupScale:SetValue(150)
-SoulShieldEditSettings.resetButton.scripts.OnClick()
-assert(SoulShieldDB.width == 260 and SoulShieldDB.barHeight == 19 and SoulShieldDB.groupOptions.shield.scale == 1)
-assert(SoulShieldDB.groupOptions.weakenedSoul.fontSize == 22 and SoulShieldDB.groups.weakenedSoul.x == 25)
+PriestShieldTrackerEditSettings.controls.width:SetValue(400)
+PriestShieldTrackerEditSettings.controls.groupScale:SetValue(150)
+PriestShieldTrackerEditSettings.resetButton.scripts.OnClick()
+assert(PriestShieldTrackerDB.width == 260 and PriestShieldTrackerDB.barHeight == 19 and PriestShieldTrackerDB.groupOptions.shield.scale == 1)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.fontSize == 22 and PriestShieldTrackerDB.groups.weakenedSoul.x == 25)
 ''')
 case("settings appear only for focused group and dismiss on outside clicks", "EnableNativeEditMode()", r'''
 assert(MouseIsOver == nil) -- Forever exposes the frame method, not this old global.
 Command("edit")
-assert(SoulShieldEditSettings == nil)
+assert(PriestShieldTrackerEditSettings == nil)
 ClickGroup("weakenedSoul")
-local panel = SoulShieldEditSettings
+local panel = PriestShieldTrackerEditSettings
 local ready, shield
 for _, frame in ipairs(frames) do
     if frame.groupKey == "weakenedSoul" then ready = frame end
@@ -720,12 +722,12 @@ Fire("GLOBAL_MOUSE_DOWN", "LeftButton"); assert(panel:IsShown())
 ready.scripts.OnDragStart(ready)
 cursorX, cursorY = 30, 20; ready.scripts.OnUpdate()
 ready.scripts.OnDragStop(ready)
-assert(SoulShieldDB.groups.weakenedSoul.x == 30 and panel:IsShown())
+assert(PriestShieldTrackerDB.groups.weakenedSoul.x == 30 and panel:IsShown())
 ready.mouseOver = false; shield.mouseOver = true
 Fire("GLOBAL_MOUSE_DOWN", "LeftButton"); ClickGroup("shield")
 assert(panel:IsShown() and panel.subtitle.text == "Absorb display")
 shield.mouseOver = false; Fire("GLOBAL_MOUSE_DOWN", "LeftButton")
-assert(not panel:IsShown() and not SoulShieldDB.locked and EditModeManagerFrame:IsShown())
+assert(not panel:IsShown() and not PriestShieldTrackerDB.locked and EditModeManagerFrame:IsShown())
 ClickGroup("weakenedSoul"); assert(panel:IsShown())
 Fire("GLOBAL_MOUSE_DOWN", "RightButton"); assert(not panel:IsShown())
 ''')
@@ -742,11 +744,11 @@ assert(bar.barColor[4] == 0 and fx.clip.shown)
 assert(fx.mover.points[1][2] == bar.texture)
 absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED"); Tick(0.04)
 assert(not fx.clip:IsRendered())
-assert(SoulShieldDB.reference == 1100)
+assert(PriestShieldTrackerDB.reference == 1100)
 ''')
 case("styles switch native smoothing and remove liquid while preserving live amount", "", r'''
 Command("settings")
-local panel = SoulShieldOptions
+local panel = PriestShieldTrackerOptions
 panel.style:Choose("Smooth")
 Command("lock"); absorb = 600; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(bar.value == 600 and bar.interpolation == 1 and not bar.liquid.clip.shown and bar.barColor[4] == 1)
@@ -757,8 +759,8 @@ assert(bar.value == 600 and bar.interpolation == nil and not bar.liquid.clip.sho
 ''')
 case("palette colors reach preview live bars and native aura-owned text", "", r'''
 Command("settings")
-SoulShieldOptions.palette:Choose("Holy")
-assert(SoulShieldDB.appearance.preset == "Holy")
+PriestShieldTrackerOptions.palette:Choose("Holy")
+assert(PriestShieldTrackerDB.appearance.preset == "Holy")
 assert(bar.liquid.rows[1].body.vertexColor[1] == 0.95)
 assert(sample.absorb.liquid.rows[1].body.vertexColor[1] == 0.95)
 local shield = Find("AuraContainer").slots.shield.button
@@ -771,59 +773,59 @@ ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
 function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
 function ColorPickerFrame:GetColorRGB() return 0.2, 0.3, 0.4 end
 Command("settings")
-SoulShieldOptions.textColor.scripts.OnClick()
+PriestShieldTrackerOptions.textColor.scripts.OnClick()
 ColorPickerFrame.info.swatchFunc()
 assert(bar.amountText.textColor[1] == 0.2 and sample.time.textColor[2] == 0.3)
-assert(SoulShieldDB.appearance.preset == "Custom")
+assert(PriestShieldTrackerDB.appearance.preset == "Custom")
 ColorPickerFrame.mouseOver = true; Fire("GLOBAL_MOUSE_DOWN", "LeftButton")
-assert(SoulShieldOptions:IsVisible() and SoulShieldDB.locked)
+assert(PriestShieldTrackerOptions:IsVisible() and PriestShieldTrackerDB.locked)
 ColorPickerFrame.info.cancelFunc()
-assert(bar.amountText.textColor[1] == 1 and SoulShieldDB.appearance.preset == "Soul")
-SoulShieldOptions:Hide()
-assert(not ColorPickerFrame.shown and not SoulShieldOptions.shown)
+assert(bar.amountText.textColor[1] == 1 and PriestShieldTrackerDB.appearance.preset == "Soul")
+PriestShieldTrackerOptions:Hide()
+assert(not ColorPickerFrame.shown and not PriestShieldTrackerOptions.shown)
 ''')
 case("combat disables options and closes picker ignoring late callbacks", "", r'''
 ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
 function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
 function ColorPickerFrame:GetColorRGB() return 0, 0, 0 end
 Command("settings")
-SoulShieldOptions.textColor.scripts.OnClick()
+PriestShieldTrackerOptions.textColor.scripts.OnClick()
 combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
 ColorPickerFrame.info.swatchFunc(); ColorPickerFrame.info.cancelFunc()
-assert(not SoulShieldOptions.style.enabled and not ColorPickerFrame.shown)
-assert(SoulShieldDB.appearance.colors.ready[1] == 0.94)
+assert(not PriestShieldTrackerOptions.style.enabled and not ColorPickerFrame.shown)
+assert(PriestShieldTrackerDB.appearance.colors.ready[1] == 0.94)
 for i = 1, 30 do Tick(0.05) end
 ''')
 case("invalid saved appearance repairs channels and preserves layout", '''
-SoulShieldDB = { width = 320, appearance = { style = "broken", preset = false,
+PriestShieldTrackerDB = { width = 320, appearance = { style = "broken", preset = false,
     colors = { absorb = { 2, 0, 0 }, duration = { 0/0, 0, 0 }, numbers = { 0.1, 0.2, 0.3 } } } }
 ''', r'''
-assert(SoulShieldDB.appearance.style == "liquid" and SoulShieldDB.appearance.preset == "Soul")
+assert(PriestShieldTrackerDB.appearance.style == "liquid" and PriestShieldTrackerDB.appearance.preset == "Soul")
 assert(bar.width == 320 and bar.amountText.textColor[3] == 0.3)
-assert(SoulShieldDB.appearance.colors.absorb[1] == 0.55)
-assert(SoulShieldDB.appearance.colors.duration[1] == 0.63)
+assert(PriestShieldTrackerDB.appearance.colors.absorb[1] == 0.55)
+assert(PriestShieldTrackerDB.appearance.colors.duration[1] == 0.63)
 ''')
 case("liquid resizes without reallocating texture pools during animation", "", r'''
 Command("edit"); ClickGroup("shield")
-SoulShieldEditSettings.controls.width:SetValue(400)
-SoulShieldEditSettings.controls.barHeight:SetValue(40)
-SoulShieldEditSettings.controls.groupScale:SetValue(150)
+PriestShieldTrackerEditSettings.controls.width:SetValue(400)
+PriestShieldTrackerEditSettings.controls.barHeight:SetValue(40)
+PriestShieldTrackerEditSettings.controls.groupScale:SetValue(150)
 assert(bar.liquid.width == 600 and sample.absorb.liquid.height == 60)
 local count = #frames
 for i = 1, 1000 do Tick(0.04) end
 assert(#frames == count)
 ''')
 case("saved custom palette and style restore without starting preview", '''
-SoulShieldDB = { appearance = { style = "smooth", preset = "Custom", colors = {
+PriestShieldTrackerDB = { appearance = { style = "smooth", preset = "Custom", colors = {
     ready = { 0.1, 0.2, 0.3 }, cross = { 0.6, 0.5, 0.4 } } } }
 ''', r'''
-assert(SoulShieldDB.locked and not sample:IsVisible() and not bar.liquid.clip.shown)
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible() and not bar.liquid.clip.shown)
 assert(sample.ws.textColor[1] == 0.1 and sample.readyCross.textColor[3] == 0.4)
 assert(bar.interpolation == 1)
 ''')
 case("login during combat initializes selected colors without protected restyling", '''
 combat = true; absorb = secret
-SoulShieldDB = { appearance = { style = "classic", colors = { absorb = { 0.1, 0.7, 0.2 } } } }
+PriestShieldTrackerDB = { appearance = { style = "classic", colors = { absorb = { 0.1, 0.7, 0.2 } } } }
 ''', r'''
 assert(not bar.liquid.clip.shown and bar.barColor[2] == 0.7 and bar.barColor[4] == 1)
 assert(rawequal(bar.value, secret))
@@ -837,140 +839,165 @@ Command("test"); Tick(0.04)
 assert(sample:IsVisible() and sample.absorb.interpolation == nil)
 ''')
 case("minimap left click opens registered AddOns category and exits layout editing", "EnableNativeEditMode()", r'''
-assert(#Settings.categories == 1 and Settings.categories[1].name == "SoulShield")
-assert(not SettingsPanel:IsVisible() and not SoulShieldOptions:IsVisible())
+assert(#Settings.categories == 1 and Settings.categories[1].name == "PriestShieldTracker")
+assert(not SettingsPanel:IsVisible() and not PriestShieldTrackerOptions:IsVisible())
 Command("edit"); ClickGroup("shield")
-SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "LeftButton")
-assert(Settings.opened == Settings.categories[1]:GetID() and SoulShieldOptions:IsVisible())
-assert(SoulShieldDB.locked and not EditModeManagerFrame:IsVisible() and not sample:IsVisible())
-assert(SoulShieldAppearance == nil and SoulShieldEditSettings.appearanceButton == nil)
+PriestShieldTrackerMinimapButton.scripts.OnClick(PriestShieldTrackerMinimapButton, "LeftButton")
+assert(Settings.opened == Settings.categories[1]:GetID() and PriestShieldTrackerOptions:IsVisible())
+assert(PriestShieldTrackerDB.locked and not EditModeManagerFrame:IsVisible() and not sample:IsVisible())
+assert(PriestShieldTrackerAppearance == nil and PriestShieldTrackerEditSettings.appearanceButton == nil)
 ''')
 case("minimap right click opens Edit Mode focused on Shield Ready", "EnableNativeEditMode()", r'''
 Command("settings")
-SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "RightButton")
+PriestShieldTrackerMinimapButton.scripts.OnClick(PriestShieldTrackerMinimapButton, "RightButton")
 assert(EditModeManagerFrame:IsShown() and not SettingsPanel:IsShown())
-assert(not SoulShieldDB.locked and SoulShieldEditSettings:IsVisible())
-assert(SoulShieldEditSettings.subtitle.text == "Shield Ready")
-assert(SoulShieldEditSettings.controls.fontSize:IsVisible() and SoulShieldEditSettings.controls.iconSize:IsVisible())
-assert(not SoulShieldEditSettings.controls.width:IsVisible())
-assert(SoulShieldEditSettings.controls.showIcon == nil and SoulShieldEditSettings.appearanceButton == nil)
+assert(not PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings:IsVisible())
+assert(PriestShieldTrackerEditSettings.subtitle.text == "Shield Ready")
+assert(PriestShieldTrackerEditSettings.controls.fontSize:IsVisible() and PriestShieldTrackerEditSettings.controls.iconSize:IsVisible())
+assert(not PriestShieldTrackerEditSettings.controls.width:IsVisible())
+assert(PriestShieldTrackerEditSettings.controls.showIcon == nil and PriestShieldTrackerEditSettings.appearanceButton == nil)
 for _, f in ipairs(frames) do
     if f.groupKey == "weakenedSoul" then assert(f.selection.color[4] == 0.36) end
 end
 ''')
 case("minimap launcher and stale dropdown actions cannot edit in combat", "EnableNativeEditMode()", r'''
 Command("settings")
-SoulShieldOptions.style:GenerateMenu()
-local action = SoulShieldOptions.style.choices[1].action
+PriestShieldTrackerOptions.style:GenerateMenu()
+local action = PriestShieldTrackerOptions.style.choices[1].action
 combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
 action()
-assert(SoulShieldDB.appearance.style == "liquid" and not SoulShieldOptions.style.enabled)
+assert(PriestShieldTrackerDB.appearance.style == "liquid" and not PriestShieldTrackerOptions.style.enabled)
 SettingsPanel:Hide()
-SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "LeftButton")
-SoulShieldMinimapButton.scripts.OnClick(SoulShieldMinimapButton, "RightButton")
-assert(not SettingsPanel:IsVisible() and not EditModeManagerFrame:IsShown() and SoulShieldDB.locked)
+PriestShieldTrackerMinimapButton.scripts.OnClick(PriestShieldTrackerMinimapButton, "LeftButton")
+PriestShieldTrackerMinimapButton.scripts.OnClick(PriestShieldTrackerMinimapButton, "RightButton")
+assert(not SettingsPanel:IsVisible() and not EditModeManagerFrame:IsShown() and PriestShieldTrackerDB.locked)
 combat = false; absorb = 0; Fire("PLAYER_REGEN_ENABLED")
-assert(SoulShieldOptions.style.enabled and SoulShieldOptions.textColor.enabled)
+assert(PriestShieldTrackerOptions.style.enabled and PriestShieldTrackerOptions.textColor.enabled)
 ''')
 case("minimap dragging saves angle without opening a menu", "", r'''
-local button = SoulShieldMinimapButton
-local before = SoulShieldDB.minimapAngle
+local button = PriestShieldTrackerMinimapButton
+local before = PriestShieldTrackerDB.minimapAngle
 cursorX, cursorY = 1240, 760
 button.scripts.OnDragStart(); button.scripts.OnUpdate(); button.scripts.OnDragStop()
-assert(SoulShieldDB.minimapAngle ~= before and not button.scripts.OnUpdate)
+assert(PriestShieldTrackerDB.minimapAngle ~= before and not button.scripts.OnUpdate)
 button.scripts.OnClick(button, "LeftButton")
-assert(SoulShieldDB.locked and SoulShieldEditSettings == nil)
+assert(PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings == nil)
 button.scripts.OnMouseDown(); button.scripts.OnClick(button, "RightButton")
-assert(not SoulShieldDB.locked and SoulShieldEditSettings.subtitle.text == "Shield Ready")
+assert(not PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings.subtitle.text == "Shield Ready")
 ''')
-case("minimap restores saved position and repairs invalid angles", "SoulShieldDB = { minimapAngle = 30 }", r'''
-assert(SoulShieldDB.minimapAngle == 30)
-assert(math.abs(SoulShieldMinimapButton.points[1][5] - 39) < 0.001)
+case("minimap restores saved position and repairs invalid angles", "PriestShieldTrackerDB = { minimapAngle = 30 }", r'''
+assert(PriestShieldTrackerDB.minimapAngle == 30)
+assert(math.abs(PriestShieldTrackerMinimapButton.points[1][5] - 39) < 0.001)
 ''')
 case("icon visibility lives in Options and layout reset preserves it", "EnableNativeEditMode()", r'''
 Command("settings")
-local check = SoulShieldOptions.showIcon
+local check = PriestShieldTrackerOptions.showIcon
 check:SetChecked(false); check.scripts.OnClick(check)
-assert(not SoulShieldDB.groupOptions.weakenedSoul.showIcon)
-SoulShieldOptions.editButton.scripts.OnClick()
+assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon)
+PriestShieldTrackerOptions.editButton.scripts.OnClick()
 assert(not sample.readyIcon.shown and not sample.readyCross.shown)
-SoulShieldEditSettings.resetButton.scripts.OnClick()
-assert(not SoulShieldDB.groupOptions.weakenedSoul.showIcon and not sample.readyIcon.shown)
+PriestShieldTrackerEditSettings.resetButton.scripts.OnClick()
+assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon and not sample.readyIcon.shown)
 Command("settings"); check:SetChecked(true); check.scripts.OnClick(check)
-SoulShieldOptions.editButton.scripts.OnClick()
+PriestShieldTrackerOptions.editButton.scripts.OnClick()
 assert(sample.readyIcon.shown and sample.readyCross.shown)
 ''')
 case("simplified bar color edits both bars and Cancel restores their distinct colors", "", r'''
 ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
 function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
 function ColorPickerFrame:GetColorRGB() return 0.2, 0.7, 0.4 end
-Command("settings"); SoulShieldOptions.barColor.scripts.OnClick()
+Command("settings"); PriestShieldTrackerOptions.barColor.scripts.OnClick()
 ColorPickerFrame.info.swatchFunc()
-local colors = SoulShieldDB.appearance.colors
+local colors = PriestShieldTrackerDB.appearance.colors
 assert(colors.absorb[2] == 0.7 and colors.duration[2] == 0.7)
 assert(colors.labels[1] == 0.9 and colors.background[1] == 0.035)
 ColorPickerFrame.info.cancelFunc()
-assert(colors.absorb[1] == 0.55 and colors.duration[1] == 0.63 and SoulShieldDB.appearance.preset == "Soul")
-SoulShieldOptions.barColor.scripts.OnClick()
+assert(colors.absorb[1] == 0.55 and colors.duration[1] == 0.63 and PriestShieldTrackerDB.appearance.preset == "Soul")
+PriestShieldTrackerOptions.barColor.scripts.OnClick()
 local stale = ColorPickerFrame.info.swatchFunc
-SoulShieldOptions:Hide(); stale()
+PriestShieldTrackerOptions:Hide(); stale()
 assert(colors.absorb[1] == 0.55)
 ''')
 case("appearance reset preserves sizes positions and reference", "", r'''
 absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 Command("width 390"); Command("settings")
-SoulShieldDB.groups.shield.x = 75
-SoulShieldDB.groupOptions.weakenedSoul.fontSize = 22
-SoulShieldOptions.style:Choose("Classic"); SoulShieldOptions.palette:Choose("Holy")
-SoulShieldOptions.resetButton.scripts.OnClick()
-assert(SoulShieldDB.width == 390 and SoulShieldDB.groups.shield.x == 75)
-assert(SoulShieldDB.groupOptions.weakenedSoul.fontSize == 22 and SoulShieldDB.reference == 1100)
-assert(SoulShieldDB.appearance.style == "liquid" and SoulShieldDB.appearance.preset == "Soul")
+PriestShieldTrackerDB.groups.shield.x = 75
+PriestShieldTrackerDB.groupOptions.weakenedSoul.fontSize = 22
+PriestShieldTrackerOptions.style:Choose("Classic"); PriestShieldTrackerOptions.palette:Choose("Holy")
+PriestShieldTrackerOptions.resetButton.scripts.OnClick()
+assert(PriestShieldTrackerDB.width == 390 and PriestShieldTrackerDB.groups.shield.x == 75)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.fontSize == 22 and PriestShieldTrackerDB.reference == 1100)
+assert(PriestShieldTrackerDB.appearance.style == "liquid" and PriestShieldTrackerDB.appearance.preset == "Soul")
 ''')
 case("settings preview uses sample values without modifying live shield reference", "", r'''
 absorb = 1100; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 absorb = 600; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 Command("settings")
-assert(SoulShieldOptions.previewAbsorb ~= bar and not SoulShieldOptions.previewAbsorb.nativeOwned)
+assert(PriestShieldTrackerOptions.previewAbsorb ~= bar and not PriestShieldTrackerOptions.previewAbsorb.nativeOwned)
 for i = 1, 100 do Tick(0.1) end
-assert(bar.value == 600 and bar.maximum == 1100 and SoulShieldDB.reference == 1100)
-assert(SoulShieldOptions.previewAbsorb.value >= 500 and SoulShieldOptions.previewAbsorb.value <= 1400)
+assert(bar.value == 600 and bar.maximum == 1100 and PriestShieldTrackerDB.reference == 1100)
+assert(PriestShieldTrackerOptions.previewAbsorb.value >= 500 and PriestShieldTrackerOptions.previewAbsorb.value <= 1400)
 ''')
 case("missing Settings or Minimap APIs leave the tracker and slash editor working", "Settings = nil; Minimap = nil", r'''
-assert(hud and SoulShieldOptions == nil and SoulShieldMinimapButton == nil)
+assert(hud and PriestShieldTrackerOptions == nil and PriestShieldTrackerMinimapButton == nil)
 Command("edit"); assert(sample:IsVisible())
 Command("lock"); Command("settings")
-assert(SoulShieldDB.locked and #messages == 1)
+assert(PriestShieldTrackerDB.locked and #messages == 1)
 ''')
 case("right click toggles native Edit Mode closed and can open it again", "EnableNativeEditMode()", r'''
-local button = SoulShieldMinimapButton
+local button = PriestShieldTrackerMinimapButton
 button.scripts.OnClick(button, "RightButton")
-assert(not SoulShieldDB.locked and SoulShieldEditSettings.subtitle.text == "Shield Ready")
+assert(not PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings.subtitle.text == "Shield Ready")
 ClickGroup("shield")
 button.scripts.OnClick(button, "RightButton")
-assert(SoulShieldDB.locked and not EditModeManagerFrame:IsVisible())
-assert(not SoulShieldEditSettings:IsVisible() and not sample:IsVisible())
+assert(PriestShieldTrackerDB.locked and not EditModeManagerFrame:IsVisible())
+assert(not PriestShieldTrackerEditSettings:IsVisible() and not sample:IsVisible())
 button.scripts.OnClick(button, "RightButton")
-assert(not SoulShieldDB.locked and EditModeManagerFrame:IsVisible())
-assert(SoulShieldEditSettings.subtitle.text == "Shield Ready")
+assert(not PriestShieldTrackerDB.locked and EditModeManagerFrame:IsVisible())
+assert(PriestShieldTrackerEditSettings.subtitle.text == "Shield Ready")
 ''')
 case("right click toggles fallback and externally opened Edit Mode", "", r'''
-local button = SoulShieldMinimapButton
+local button = PriestShieldTrackerMinimapButton
 Command("edit"); ClickGroup("shield")
 button.scripts.OnClick(button, "RightButton")
-assert(SoulShieldDB.locked and not sample:IsVisible() and not SoulShieldEditSettings:IsVisible())
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible() and not PriestShieldTrackerEditSettings:IsVisible())
 button.scripts.OnClick(button, "RightButton")
-assert(not SoulShieldDB.locked and SoulShieldEditSettings.subtitle.text == "Shield Ready")
+assert(not PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings.subtitle.text == "Shield Ready")
 button.scripts.OnClick(button, "RightButton")
-assert(SoulShieldDB.locked)
+assert(PriestShieldTrackerDB.locked)
 ''')
 case("palette dropdown contains six working presets without a Custom option", "", r'''
-Command("settings"); SoulShieldOptions.palette:GenerateMenu()
-assert(#SoulShieldOptions.palette.choices == 6)
-for _, choice in ipairs(SoulShieldOptions.palette.choices) do assert(choice.text ~= "Custom") end
-SoulShieldOptions.palette:Choose("Holy")
-assert(SoulShieldDB.appearance.preset == "Holy")
-SoulShieldOptions.palette:Choose("Emerald")
-assert(SoulShieldDB.appearance.preset == "Emerald")
+Command("settings"); PriestShieldTrackerOptions.palette:GenerateMenu()
+assert(#PriestShieldTrackerOptions.palette.choices == 6)
+for _, choice in ipairs(PriestShieldTrackerOptions.palette.choices) do assert(choice.text ~= "Custom") end
+PriestShieldTrackerOptions.palette:Choose("Holy")
+assert(PriestShieldTrackerDB.appearance.preset == "Holy")
+PriestShieldTrackerOptions.palette:Choose("Emerald")
+assert(PriestShieldTrackerDB.appearance.preset == "Emerald")
 ''')
-print("57 logic checks passed; live client validation remains required.")
+case("previous character settings migrate with layout colors and calibration intact", '''
+SoulShieldDB = { width = 350, x = 85, reference = 1100, minimapAngle = 30,
+    appearance = { style = "smooth", preset = "Frost", colors = { absorb = { 0.1, 0.6, 0.9 } } },
+    groups = { shield = { x = 40, y = -10 } } }
+absorb = 600
+''', r'''
+assert(PriestShieldTrackerDB == SoulShieldDB)
+assert(PriestShieldTrackerDB.width == 350 and PriestShieldTrackerDB.x == 85)
+assert(PriestShieldTrackerDB.groups.shield.x == 40 and PriestShieldTrackerDB.appearance.preset == "Frost")
+assert(bar.maximum == 1100 and bar.value == 600 and PriestShieldTrackerDB.minimapAngle == 30)
+assert(PriestShieldTrackerDB.locked and not sample:IsVisible())
+''')
+case("new settings take precedence over previous settings on later logins", '''
+SoulShieldDB = { width = 350, x = 85 }
+PriestShieldTrackerDB = { width = 300, x = -25 }
+''', r'''
+assert(PriestShieldTrackerDB.width == 300 and PriestShieldTrackerDB.x == -25)
+assert(PriestShieldTrackerDB ~= SoulShieldDB and SoulShieldDB.width == 350)
+''')
+case("renamed public identity and commands are registered", "", r'''
+assert(SLASH_PRIESTSHIELDTRACKER1 == "/priestshieldtracker")
+assert(SLASH_PRIESTSHIELDTRACKER2 == "/pst" and SLASH_PRIESTSHIELDTRACKER3 == "/ss")
+assert(Settings.categories[1].name == "PriestShieldTracker")
+assert(PriestShieldTrackerHUD and PriestShieldTrackerMinimapButton and SoulShieldHUD == nil)
+''')
+print("60 logic checks passed; live client validation remains required.")

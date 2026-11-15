@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def package(tag=None):
-    toc = (ROOT / "SoulShield.toc").read_text(encoding="utf-8")
+    toc = (ROOT / "PriestShieldTracker.toc").read_text(encoding="utf-8")
     version = re.search(r"^## Version: (\S+)$", toc, re.M).group(1)
     if tag:
         if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?", tag):
@@ -16,7 +16,7 @@ def package(tag=None):
         if tag != f"v{version}":
             raise ValueError(f"Tag {tag} does not match TOC version {version}")
     assert "## Interface: 16001" in toc
-    files = {"SoulShield.toc", "LICENSE", "CHANGELOG.md"}
+    files = {"PriestShieldTracker.toc", "LICENSE", "CHANGELOG.md"}
     for line in toc.splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
@@ -27,16 +27,22 @@ def package(tag=None):
     for name in files:
         path = (ROOT / name).resolve()
         assert path.is_relative_to(ROOT) and path.is_file(), name
-    output = ROOT / "dist" / f"SoulShield-{version}.zip"
+    members = {f"PriestShieldTracker/{name}": ROOT / name for name in files}
+    # Keep only the saved-variable loader at the old folder path, matching .pkgmeta.
+    importer = ROOT / "Compatibility/SoulShield"
+    for path in importer.rglob("*"):
+        if path.is_file():
+            members[f"SoulShield/{path.relative_to(importer).as_posix()}"] = path
+    output = ROOT / "dist" / f"PriestShieldTracker-{version}.zip"
     output.parent.mkdir(exist_ok=True)
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
-        for name in sorted(files):
-            archive.write(ROOT / name, f"SoulShield/{name}")
+        for name, path in sorted(members.items()):
+            archive.write(path, name)
     with ZipFile(output) as archive:
         assert archive.testzip() is None
-        assert set(archive.namelist()) == {f"SoulShield/{name}" for name in files}
-        for name in files:
-            assert archive.read(f"SoulShield/{name}") == (ROOT / name).read_bytes()
+        assert set(archive.namelist()) == set(members)
+        for name, path in members.items():
+            assert archive.read(name) == path.read_bytes()
     return version, output
 
 

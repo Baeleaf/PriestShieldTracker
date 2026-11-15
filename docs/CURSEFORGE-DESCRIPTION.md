@@ -1,10 +1,10 @@
-# SoulShield
+# PriestShieldTracker
 
 **Your shield strength, shield timer, and Weakened Soul countdown in one small display.**
 
-SoulShield helps priests in **WoW Forever** see how much protection remains, when Power Word: Shield expires, and how long until Weakened Soul ends.
+PriestShieldTracker helps priests in **WoW Forever** see how much protection remains, when Power Word: Shield expires, and how long until Weakened Soul ends.
 
-![SoulShield showing remaining absorption and shield countdowns](https://raw.githubusercontent.com/Baeleaf/SoulShield/v0.2.4/docs/images/soulshield-demo.gif)
+![PriestShieldTracker showing remaining absorption and shield countdowns](https://raw.githubusercontent.com/Baeleaf/PriestShieldTracker/main/docs/images/priestshieldtracker-demo.gif)
 
 *Demo mode with sample values, shown at 1.5x speed.*
 
@@ -18,17 +18,17 @@ SoulShield helps priests in **WoW Forever** see how much protection remains, whe
 
 ## Make It Your Own
 
-![SoulShield Edit Mode with movable groups and size controls](https://raw.githubusercontent.com/Baeleaf/SoulShield/v0.2.4/docs/images/soulshield-edit-mode.png)
+![PriestShieldTracker Edit Mode with movable groups and size controls](https://raw.githubusercontent.com/Baeleaf/PriestShieldTracker/main/docs/images/priestshieldtracker-edit-mode.png)
 
 *Move and resize your display in Edit Mode, with separate text and icon controls.*
 
-Open **Esc > Edit Mode** or type `/ss`. Click either group to change its settings, drag it where you want it, then click **Save**.
+Open **Esc > Edit Mode** or type `/pst`. Click either group to change its settings, drag it where you want it, then click **Save**.
 
 ## Customization
 
-![SoulShield cycling through Classic, Smooth, and Liquid bars with selected color palettes](https://raw.githubusercontent.com/Baeleaf/SoulShield/main/docs/images/soulshield-customization.gif)
+![PriestShieldTracker cycling through Classic, Smooth, and Liquid bars with selected color palettes](https://raw.githubusercontent.com/Baeleaf/PriestShieldTracker/main/docs/images/priestshieldtracker-customization.gif)
 
-Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **Options > AddOns > SoulShield**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
+Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **Options > AddOns > PriestShieldTracker**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
 
 **Left-click** the minimap shield for settings. **Right-click** to open or close Edit Mode.
 
@@ -38,26 +38,26 @@ Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **O
 
 Cast **Power Word: Shield** on yourself to see the display. Shield yourself outside combat first so the bar learns what a full shield looks like. The display hides when there is nothing to track.
 
-- `/ss` - Open Edit Mode.
-- `/ss test` - Preview the animated bars. Run it again to stop.
-- `/ss reset` - Restore the default layout.
+- `/pst` - Open Edit Mode.
+- `/pst test` - Preview the animated bars. Run it again to stop.
+- `/pst reset` - Restore the default layout.
 
 ## Installation
 
-Version **0.3.0** supports **WoW Forever 1.60.1**.
+Version **0.3.1** supports **WoW Forever 1.60.1**.
 
-1. Install SoulShield through the CurseForge app, or download the ZIP from this page.
-2. Extract the **SoulShield** folder into `World of Warcraft/_forever_/Interface/AddOns/`.
-3. Restart WoW and enable SoulShield on your priest.
+1. Install PriestShieldTracker through the CurseForge app, or download the ZIP from this page.
+2. Extract both included folders into `World of Warcraft/_forever_/Interface/AddOns/`. The small settings importer preserves your previous layout.
+3. Restart WoW and enable PriestShieldTracker on your priest.
 
 ## Good to Know
 
-SoulShield tracks your own character. The protection number includes all active shields. **Shield Ready** follows Weakened Soul; you still need enough mana to cast. See the [tracking notes](https://github.com/Baeleaf/SoulShield/blob/main/docs/REFERENCE.md#forever-restrictions) for limitations when another priest shields you.
+PriestShieldTracker tracks your own character. The protection number includes all active shields. **Shield Ready** follows Weakened Soul; you still need enough mana to cast. See the [tracking notes](https://github.com/Baeleaf/PriestShieldTracker/blob/main/docs/REFERENCE.md#forever-restrictions) for limitations when another priest shields you.
 
 ## Feedback
 
-Found a bug or have an idea? [Open a GitHub issue](https://github.com/Baeleaf/SoulShield/issues).
+Found a bug or have an idea? [Open a GitHub issue](https://github.com/Baeleaf/PriestShieldTracker/issues).
 
 ## More
 
-[Detailed guide & troubleshooting](https://github.com/Baeleaf/SoulShield/blob/main/docs/REFERENCE.md) | [All Rights Reserved](https://github.com/Baeleaf/SoulShield/blob/main/LICENSE)
+[Detailed guide & troubleshooting](https://github.com/Baeleaf/PriestShieldTracker/blob/main/docs/REFERENCE.md) | [All Rights Reserved](https://github.com/Baeleaf/PriestShieldTracker/blob/main/LICENSE)

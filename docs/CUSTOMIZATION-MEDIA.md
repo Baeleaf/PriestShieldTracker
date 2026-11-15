@@ -2,8 +2,8 @@
 
 Source: the owner's OBS recording `2026-11-14 21-01-23.mp4`, supplied November 14, 2026.
 
-Deliverable: `docs/images/soulshield-customization.gif`, 680 by 230 pixels,
-12 fps, 12.25 seconds, 816,150 bytes, looping.
+Deliverable: `docs/images/priestshieldtracker-customization.gif`, 680 by 230 pixels,
+12 fps, 12.25 seconds, 810,228 bytes, looping.
 
 Only the native preview rectangle is retained. The white circle cursor is
 outside this crop during all selected intervals. Dropdowns, unrelated gameplay,
@@ -28,9 +28,4 @@ Rebuild using `python scripts/customization-gif.py PATH_TO_SOURCE --ffmpeg PATH_
 The helper renders title cards through Windows System.Drawing and uses FFmpeg
 for accurate cuts, cropping, scaling, and GIF encoding.
 
-The approved GIF and customization section are published in the public GitHub
-README, marked as the next update while 0.2.4 is awaiting approval. The GIF's
-public main-branch URL is available for CurseForge. The matching CurseForge
-section remains prepared locally for the appearance release; remove the
-next-update notice from both descriptions when that release is published.
-No new tag or release has been created for this documentation update.
+The renamed GIF is published in the README and CurseForge description. A matching local copy is retained in `.local/media-session/priestshieldtracker-customization.gif`.

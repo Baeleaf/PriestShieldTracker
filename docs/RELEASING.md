@@ -1,6 +1,6 @@
 # Release updates
 
-CurseForge project: 1805535. Repository: https://github.com/Baeleaf/SoulShield
+CurseForge project: 1805535. Repository: https://github.com/Baeleaf/PriestShieldTracker
 
 ## One-time connection
 
@@ -8,29 +8,21 @@ The project Source tab is set to GitHub and **new tagged commits only**.
 The owner completed the GitHub push webhook setup on November 14, 2026. Verified:
 correct CurseForge project endpoint with a configured token, Active enabled,
 push events only, and SSL verification enabled. GitHub reported a successful
-initial ping (20:16:36 Eastern). No new tag, release, or packaging trigger was
-created during verification. Delivery of an actual tagged release is deferred
-until the first public version is approved.
+initial ping. The first public version is approved and tagged-release packaging has been used for 0.3.0. The project and source URL now use PriestShieldTracker.
 
 For future setup or replacement:
 
 1. Create a CurseForge API token at https://www.curseforge.com/account/api-tokens.
-2. Open https://github.com/Baeleaf/SoulShield/settings/hooks/new.
+2. Open https://github.com/Baeleaf/PriestShieldTracker/settings/hooks/new.
 3. Set Payload URL to `https://www.curseforge.com/api/projects/1805535/package?token=YOUR_TOKEN`.
 4. Leave SSL verification enabled, keep **Just the push event**, and enable Active.
 5. Add the webhook. Keep the token out of source files, screenshots, and release notes.
 
-This requires the owner's credential setup. Do not create an experimental tag just
-to test it while the first public file is under review.
-
 ## Each release
 
 1. Finish local in-game checks and review the change.
-2. Update `## Version` in SoulShield.toc and add the changelog entry.
-   For the appearance release, remove the **Coming in the next update** notice
-   from the README and `docs/CURSEFORGE-DESCRIPTION.md`. The approved customization
-   GIF is already published on GitHub; publish the prepared CurseForge description
-   with this release and confirm its GIF displays correctly.
+2. Update `## Version` in PriestShieldTracker.toc and add the changelog entry.
+   Keep the small compatibility importer version in step with the main TOC.
 3. Run `python tests/check.py` and `python scripts/package.py --tag vX.Y.Z`.
 4. Commit and push the code, then push a new `vX.Y.Z` tag at that commit.
 5. GitHub Actions builds and attaches the installable ZIP to a GitHub release.
@@ -45,7 +37,7 @@ for prereleases. Avoid moving published tags; fix forward with a new version.
 The CurseForge webhook is independent of GitHub Actions: it does not wait for
 the GitHub tests, so local checks must pass before pushing a release tag.
 
-The package keeps the `SoulShield` folder name and includes runtime Lua, media,
+The package contains the `PriestShieldTracker` runtime folder and a small legacy settings importer. It includes runtime Lua, media,
 license notices, TOC, and changelog. Development files and large screenshots
 are excluded by `.pkgmeta`.
 

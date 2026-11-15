@@ -1,0 +1,10 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: PriestShieldTracker Settings Import
+## Notes: Loads previous character settings for automatic migration. No display or tracking runs here.
+## Author: Baeleaf
+## Version: 0.3.1
+## SavedVariablesPerCharacter: SoulShieldDB
+## DefaultState: enabled
+
+Migration.lua

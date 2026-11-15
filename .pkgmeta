@@ -1,4 +1,6 @@
-package-as: SoulShield
+package-as: PriestShieldTracker
+move-folders:
+  PriestShieldTracker/Compatibility/SoulShield: SoulShield
 enable-nolib-creation: no
 manual-changelog:
   filename: CHANGELOG.md

@@ -1,4 +1,4 @@
-# SoulShield detailed reference
+# PriestShieldTracker detailed reference
 
 For the short player guide, see [README](../README.md). This page contains detailed behavior, troubleshooting notes, development information, and testing steps.
 
@@ -10,43 +10,43 @@ For the short player guide, see [README](../README.md). This page contains detai
 | Retail | Not supported or advertised. |
 | Classic Era, Hardcore, Anniversary, or progression Classic | Not supported or advertised. |
 
-This matches [WeakenedSoulTracker's published version coverage](https://www.curseforge.com/wow/addons/weakenedsoultracker/files/all), which lists Forever 1.60.1. SoulShield is a separate addon and does not require WeakenedSoulTracker. Additional client support would need a separate compatibility implementation and in-game validation, not just a different interface number.
+This matches [WeakenedSoulTracker's published version coverage](https://www.curseforge.com/wow/addons/weakenedsoultracker/files/all), which lists Forever 1.60.1. PriestShieldTracker is a separate addon and does not require WeakenedSoulTracker. Additional client support would need a separate compatibility implementation and in-game validation, not just a different interface number.
 
 ## Install
 
-Extract the **SoulShield** folder into your WoW `_forever_/Interface/AddOns` folder. Restart the client if the addon is new, then enable SoulShield on your priest. Earlier builds have been tested in game; each new update still needs an in-game check.
+Extract the **PriestShieldTracker** folder into your WoW `_forever_/Interface/AddOns` folder. Restart the client if the addon is new, then enable PriestShieldTracker on your priest. Earlier builds have been tested in game; each new update still needs an in-game check.
 
-The manifest restricts loading to Forever. Install only this repository's SoulShield folder; WeakenedSoulTracker is optional and is not modified by SoulShield.
+The manifest restricts loading to Forever. Install only this repository's PriestShieldTracker folder; WeakenedSoulTracker is optional and is not modified by PriestShieldTracker.
 
 ## Use
 
-Open **Esc → Edit Mode** to show SoulShield's two draggable groups. Click the element you want to edit to open its settings. Click the other element to switch options in the same menu. Drag a group to move it, or drag **Move entire display** to move both groups together.
+Open **Esc → Edit Mode** to show PriestShieldTracker's two draggable groups. Click the element you want to edit to open its settings. Click the other element to switch options in the same menu. Drag a group to move it, or drag **Move entire display** to move both groups together.
 
 The menu starts hidden and follows the selected group. Clicking outside both the element groups and the menu clears the selection and hides the menu, while leaving Edit Mode open. Clicking or dragging controls inside the menu keeps it open. The selected group is highlighted until you click elsewhere.
 
-Drag the **SoulShield** title bar to move the settings panel. It stays within the screen and remembers its position across reloads. Moving the menu does not move either display group.
+Drag the **PriestShieldTracker** title bar to move the settings panel. It stays within the screen and remembers its position across reloads. Moving the menu does not move either display group.
 
 Both groups have independent **Group size** and **Text size** controls. The Shield Ready group also has **Icon size** and **Show crossed-out shield icon** controls. The absorb group has **Bar width** and **Bar height** controls. **Reset group** restores only the selected group's appearance and position. **Save** finishes editing and closes Edit Mode.
 
-![SoulShield Edit Mode showing movable priest shield groups and text, icon, and group size settings](images/soulshield-edit-mode.png)
+![PriestShieldTracker Edit Mode showing movable priest shield groups and text, icon, and group size settings](images/priestshieldtracker-edit-mode.png)
 
 *Move and resize your display in Edit Mode, with separate text and icon controls.*
 
-SoulShield settings save automatically per character as they change. They currently apply across Blizzard layout presets; Blizzard's Save/Discard actions do not revert these separate addon settings. Editing closes on combat entry, and does not automatically reopen afterward when entered through Blizzard Edit Mode.
+PriestShieldTracker settings save automatically per character as they change. They currently apply across Blizzard layout presets; Blizzard's Save/Discard actions do not revert these separate addon settings. Editing closes on combat entry, and does not automatically reopen afterward when entered through Blizzard Edit Mode.
 
-`/ss` or `/soulshield` opens the same Edit Mode workflow. If Blizzard Edit Mode is unavailable, it opens SoulShield's standalone editor.
+`/pst` or `/priestshieldtracker` opens the same Edit Mode workflow. If Blizzard Edit Mode is unavailable, it opens PriestShieldTracker's standalone editor.
 
 | Command | Effect |
 | --- | --- |
-| `/ss test` | Toggle a looping demonstration; automatically ends on entering combat. |
-| `/ss edit` | Open Edit Mode and SoulShield's settings. |
-| `/ss calibrate` | Treat current absorbs as full; use immediately after a fresh shield outside combat. |
-| `/ss reset` | Restore the default position, size, and lock. |
-| `/ss status` | Show whether native timer setup succeeded. |
+| `/pst test` | Toggle a looping demonstration; automatically ends on entering combat. |
+| `/pst edit` | Open Edit Mode and PriestShieldTracker's settings. |
+| `/pst calibrate` | Treat current absorbs as full; use immediately after a fresh shield outside combat. |
+| `/pst reset` | Restore the default position, size, and lock. |
+| `/pst status` | Show whether native timer setup succeeded. |
 
-Position, group offsets, group appearance, and the last readable absorb reference are saved separately for each character. The Shield Ready label, countdown, and icon always move together. The absorb bar, label, number, duration strip, and shield-expiration text move together as the shield group. Existing individual layouts are regrouped around the old label and absorb-bar positions, restoring consistent spacing inside each group. The old `/ss unlock`, `/ss lock`, `/ss width`, and `/ss scale` commands remain compatibility aliases; they are no longer needed to edit the display.
+Position, group offsets, group appearance, and the last readable absorb reference are saved separately for each character. The Shield Ready label, countdown, and icon always move together. The absorb bar, label, number, duration strip, and shield-expiration text move together as the shield group. Existing individual layouts are regrouped around the old label and absorb-bar positions, restoring consistent spacing inside each group. The old `/pst unlock`, `/pst lock`, `/pst width`, and `/pst scale` commands remain compatibility aliases; they are no longer needed to edit the display.
 
-Every login or reload starts locked; editing previews are never restored from a previous session. `/ss reset` also restores both groups' appearance and positions. Samples use separate widgets from the live display, so preview values cannot remain on the live bar when editing ends.
+Every login or reload starts locked; editing previews are never restored from a previous session. `/pst reset` also restores both groups' appearance and positions. Samples use separate widgets from the live display, so preview values cannot remain on the live bar when editing ends.
 
 ## What the display means
 
@@ -70,7 +70,7 @@ The absorb StatusBar and FontStrings belong to an ordinary addon-owned frame out
 
 ## In-game acceptance check
 
-1. Open Esc → Edit Mode. Confirm the icon is to the right of Shield Ready and no settings menu opens until you click an element. Click each group and try group size, text size, icon options, and absorb bar dimensions. Drag both groups, then use Save. With no active auras, closing Edit Mode should leave the screen empty. Try `/ss test` separately and toggle it off.
+1. Open Esc → Edit Mode. Confirm the icon is to the right of Shield Ready and no settings menu opens until you click an element. Click each group and try group size, text size, icon options, and absorb bar dimensions. Drag both groups, then use Save. With no active auras, closing Edit Mode should leave the screen empty. Try `/pst test` separately and toggle it off.
 2. Cast Power Word: Shield on yourself outside combat. Check that the bar fills and both timers appear.
 3. Take hits. Verify that absorption and the white edge decrease; the duration strip should continue with time. Check both countdowns show tenths and that repeated damage does not generate forbidden-object errors, including after a reload without an absorb reference.
 4. Let the shield break while Weakened Soul remains. The absorb bar should disappear immediately and the debuff countdown should continue independently. With neither aura active, nothing should remain visible; also try this out of combat.
@@ -80,7 +80,7 @@ The absorb StatusBar and FontStrings belong to an ordinary addon-owned frame out
 
 ## Development
 
-The repository root is the addon folder. For local development, clone it into `_forever_/Interface/AddOns/SoulShield`.
+The repository root is the addon folder. For local development, clone it into `_forever_/Interface/AddOns/PriestShieldTracker`.
 
 Run the Lua 5.1 boundary-model checks with Python and the development dependency:
 

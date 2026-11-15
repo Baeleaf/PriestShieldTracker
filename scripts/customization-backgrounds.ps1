@@ -13,11 +13,11 @@ for ($i = 0; $i -lt $stages.Count; $i++) {
     $graphics.Clear([System.Drawing.Color]::FromArgb(12,11,17))
     $accent = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml($stage.accent))
     $graphics.FillRectangle($accent,20,20,3,26)
-    $graphics.DrawString('SoulShield',$brandFont,[System.Drawing.Brushes]::White,32,19)
+    $graphics.DrawString('PriestShieldTracker',$brandFont,[System.Drawing.Brushes]::White,32,19)
     $caption = $stage.style + ' / ' + $stage.palette
     $size = $graphics.MeasureString($caption,$titleFont)
     $graphics.DrawString($caption,$titleFont,$accent,658-$size.Width,21)
-    $graphics.DrawString('Options > AddOns > SoulShield',$smallFont,$muted,20,207)
+    $graphics.DrawString('Options > AddOns > PriestShieldTracker',$smallFont,$muted,20,207)
     $graphics.DrawString('Sample values',$smallFont,$muted,573,207)
     $bitmap.Save((Join-Path $OutputDirectory ('background-{0}.png' -f $i)),[System.Drawing.Imaging.ImageFormat]::Png)
     $accent.Dispose(); $graphics.Dispose(); $bitmap.Dispose()

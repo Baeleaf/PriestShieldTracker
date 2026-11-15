@@ -1,0 +1,2 @@
+-- This compatibility addon only declares the previous saved-variable file.
+-- The primary addon imports those settings at PLAYER_LOGIN. It owns all UI.

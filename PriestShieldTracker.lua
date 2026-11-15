@@ -124,7 +124,7 @@ local function Secret(value)
 end
 
 local function Print(message)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffc8a0ffSoulShield:|r " .. message)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffc8a0ffPriestShieldTracker:|r " .. message)
 end
 
 local function ClearGroupFocus()
@@ -486,7 +486,7 @@ local function AddSettingsSlider(panel, key, caption, low, high, step, y, format
 end
 
 local function BuildSettingsPanel()
-    local panel = CreateFrame("Frame", "SoulShieldEditSettings", UIParent, "BackdropTemplate")
+    local panel = CreateFrame("Frame", "PriestShieldTrackerEditSettings", UIParent, "BackdropTemplate")
     settingsPanel = panel
     panel.controls = {}
     panel:SetSize(300, 380)
@@ -532,7 +532,7 @@ local function BuildSettingsPanel()
     titleBar:SetScript("OnDragStop", StopMenuDrag)
     panel:SetScript("OnHide", StopMenuDrag)
     local title = Text(titleBar, 17, 0.96, 0.9, 1)
-    title:SetPoint("CENTER", 0, -4); title:SetText("SoulShield")
+    title:SetPoint("CENTER", 0, -4); title:SetText("PriestShieldTracker")
     panel.subtitle = Text(panel, 12, 0.8, 0.78, 0.86)
     panel.subtitle:SetPoint("TOP", 0, -44)
     AddSettingsSlider(panel, "groupScale", "Group size", 50, 200, 5, -74, "%d%%",
@@ -639,8 +639,9 @@ end
 local function Initialize()
     if initialized then return end
     if select(2, UnitClass("player")) ~= "PRIEST" then return end
-    db = type(SoulShieldDB) == "table" and SoulShieldDB or {}
-    SoulShieldDB = db
+    db = type(PriestShieldTrackerDB) == "table" and PriestShieldTrackerDB
+        or ns.ImportPreviousSettings() or {}
+    PriestShieldTrackerDB = db
     Appearance.Init(db)
     for key, value in pairs(defaults) do
         if type(db[key]) ~= type(value) then db[key] = value end
@@ -676,7 +677,7 @@ local function Initialize()
             if type(value) ~= "number" or value ~= value or math.abs(value) > 10000 then position[axis] = 0 end
         end
     end
-    hud = CreateFrame("Frame", "SoulShieldHUD", UIParent)
+    hud = CreateFrame("Frame", "PriestShieldTrackerHUD", UIParent)
     hud:SetFrameStrata("MEDIUM")
     hud:SetMovable(true)
     hud:SetClampedToScreen(true)
@@ -726,7 +727,7 @@ local function Initialize()
         auraRoot:Hide()
         shieldButton = nil
         nativeParts = {}
-        Print("Absorb bar loaded; timers could not start. Use /soulshield status for details.")
+        Print("Absorb bar loaded; timers could not start. Use /priestshieldtracker status for details.")
     end
     BuildHandles()
     initialized = true
@@ -803,9 +804,10 @@ events:SetScript("OnEvent", function(_, event, argument)
     UpdateAbsorb()
 end)
 
-SLASH_SOULSHIELD1 = "/soulshield"
-SLASH_SOULSHIELD2 = "/ss"
-SlashCmdList.SOULSHIELD = function(message)
+SLASH_PRIESTSHIELDTRACKER1 = "/priestshieldtracker"
+SLASH_PRIESTSHIELDTRACKER2 = "/pst"
+SLASH_PRIESTSHIELDTRACKER3 = "/ss"
+SlashCmdList.PRIESTSHIELDTRACKER = function(message)
     if not initialized then Print("This tracker is for priest characters on WoW Forever."); return end
     local command, argument = (message or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
     if command == "status" then
@@ -820,7 +822,7 @@ SlashCmdList.SOULSHIELD = function(message)
     elseif command == "lock" then
         CloseEditMode()
     elseif command == "test" then
-        if not db.locked then Print("Finish Edit Mode, then /ss test for the animated preview.")
+        if not db.locked then Print("Finish Edit Mode, then /pst test for the animated preview.")
         elseif previewStarted then StopPreview() else StartPreview() end
     elseif command == "scale" or command == "width" then
         local value = tonumber(argument)
@@ -853,6 +855,6 @@ SlashCmdList.SOULSHIELD = function(message)
         Layout()
         if wasEditing then BeginEditing(editModeActive) end
     else
-        Print("/ss edit | settings | test | calibrate | reset | status")
+        Print("/pst edit | settings | test | calibrate | reset | status")
     end
 end

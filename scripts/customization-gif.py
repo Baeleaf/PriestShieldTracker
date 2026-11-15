@@ -41,7 +41,7 @@ def build(source, ffmpeg):
             "-map", "[out]", "-an", "-t", str(stage["duration"]), "-c:v", "ffv1", str(work / f"stage-{index}.mkv")])
     concat = work / "segments.txt"
     concat.write_text("".join(f"file 'stage-{i}.mkv'\n" for i in range(len(STAGES))))
-    output = ROOT / "docs/images/soulshield-customization.gif"
+    output = ROOT / "docs/images/priestshieldtracker-customization.gif"
     run(["-f", "concat", "-safe", "0", "-i", str(concat), "-filter_complex",
         "split[a][b];[a]palettegen=max_colors=256:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle",
         "-loop", "0", str(output)])

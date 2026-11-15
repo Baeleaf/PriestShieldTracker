@@ -1,11 +1,11 @@
--- SoulShield's small, native-fill-driven liquid renderer.
+-- PriestShieldTracker's small, native-fill-driven liquid renderer.
 -- Inspired by Smooth Animated Bars / Smooth Experience Bar by Jordan.
 -- Borrowed generated textures retain their MIT notice in licenses/SmoothAnimatedBars.txt.
 local _, ns = ...
 local A = { bars = {}, texts = {} }
 ns.Appearance = A
 local WHITE = "Interface\\Buttons\\WHITE8x8"
-local MEDIA = "Interface\\AddOns\\SoulShield\\Media\\"
+local MEDIA = "Interface\\AddOns\\PriestShieldTracker\\Media\\"
 local sin, pi = math.sin, math.pi
 local interpolation = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
 local keys = { "absorb", "duration", "background", "labels", "numbers", "ready", "cross" }

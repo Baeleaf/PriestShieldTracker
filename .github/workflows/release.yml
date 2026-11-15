@@ -11,7 +11,7 @@ on:
       tag:
         description: Existing release tag to package
         required: true
-        default: v0.3.0
+        default: v0.3.1
 
 concurrency:
   group: addon-release-${{ inputs.tag || github.ref_name }}
@@ -61,9 +61,9 @@ jobs:
         run: |
           if gh release view "v$VERSION" > /dev/null 2>&1; then
             gh release upload "v$VERSION" "$ASSET" --clobber
-            gh release edit "v$VERSION" --title "SoulShield $VERSION" --notes-file "$NOTES"
+            gh release edit "v$VERSION" --title "PriestShieldTracker $VERSION" --notes-file "$NOTES"
           elif [[ "$VERSION" == *-alpha.* || "$VERSION" == *-beta.* ]]; then
-            gh release create "v$VERSION" "$ASSET" --verify-tag --prerelease --title "SoulShield $VERSION" --notes-file "$NOTES"
+            gh release create "v$VERSION" "$ASSET" --verify-tag --prerelease --title "PriestShieldTracker $VERSION" --notes-file "$NOTES"
           else
-            gh release create "v$VERSION" "$ASSET" --verify-tag --title "SoulShield $VERSION" --notes-file "$NOTES"
+            gh release create "v$VERSION" "$ASSET" --verify-tag --title "PriestShieldTracker $VERSION" --notes-file "$NOTES"
           fi

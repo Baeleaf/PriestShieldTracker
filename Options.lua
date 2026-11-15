@@ -101,10 +101,10 @@ local function EditLayout(toggle)
 end
 
 local function BuildPage()
-    panel = CreateFrame("Frame", "SoulShieldOptions", UIParent)
+    panel = CreateFrame("Frame", "PriestShieldTrackerOptions", UIParent)
     panel:Hide()
     panel.widgets = {}
-    Label(panel, "SoulShield", 22, 20, -16)
+    Label(panel, "PriestShieldTracker", 22, 20, -16)
     Label(panel, "Choose your look here. Move and resize the display in Edit Mode.", 12, 20, -49)
     local sample = CreateFrame("Frame", nil, panel)
     sample:SetPoint("TOPLEFT", 20, -82); sample:SetSize(400, 85)
@@ -176,7 +176,7 @@ end
 
 local function BuildMinimapButton()
     if not Minimap then return end
-    local button = CreateFrame("Button", "SoulShieldMinimapButton", Minimap)
+    local button = CreateFrame("Button", "PriestShieldTrackerMinimapButton", Minimap)
     button:SetSize(32, 32); button:SetFrameStrata("MEDIUM")
     button:SetFrameLevel(Minimap:GetFrameLevel() + 5)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -214,7 +214,7 @@ local function BuildMinimapButton()
         elseif mouseButton == "LeftButton" then O.Open() end
     end)
     button:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT"); GameTooltip:SetText("SoulShield")
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT"); GameTooltip:SetText("PriestShieldTracker")
         GameTooltip:AddLine("Left-click: Settings", 1, 1, 1)
         GameTooltip:AddLine("Right-click: Toggle Edit Mode (Shield Ready)", 1, 1, 1)
         GameTooltip:AddLine("Drag to move around the minimap", 0.7, 0.7, 0.7)
@@ -230,7 +230,7 @@ function O.Initialize(savedDB, actions)
     db.minimapAngle = db.minimapAngle % 360
     if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
         BuildPage()
-        category = Settings.RegisterCanvasLayoutCategory(panel, "SoulShield")
+        category = Settings.RegisterCanvasLayoutCategory(panel, "PriestShieldTracker")
         Settings.RegisterAddOnCategory(category)
         O.Refresh()
     end
