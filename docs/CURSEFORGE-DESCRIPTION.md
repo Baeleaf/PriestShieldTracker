@@ -37,19 +37,17 @@ Open **Esc > Edit Mode** or type `/pst`. Click either group to change its settin
 
 Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **Options > AddOns > PriestShieldTracker**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
 
-**Left-click** the minimap shield for settings. **Right-click** to open or close Edit Mode.
+**Left-click** the minimap shield to open or close settings. **Right-click** to open or close Edit Mode.
 
 *Edited preview with sample values. Shows selected styles and palettes at normal speed, with menu interactions removed.*
 
 ## Feature Switches
 
-In **Options > AddOns > PriestShieldTracker** (`/pst settings`), independently turn on or off:
+In **Options > AddOns > PriestShieldTracker** (`/pst settings`), turn Weakened Soul icons on party and raid frames on or off and preview their appearance on sample frames.
 
-- Weakened Soul icons on party and raid frames.
-- The Shield Ready and Weakened Soul countdown group.
-- The absorb shield and shield expiring bars group.
+In **Edit Mode**, click **Shield Ready** or **Absorb display** and use **Enabled** to turn that group on or off. The Shield Ready window also contains **Show crossed-out shield icon**. Disabled groups remain selectable in Edit Mode so you can turn them back on.
 
-All three are enabled by default and saved for each character. Disabled HUD groups also stay hidden in Edit Mode and test previews. Change these settings outside combat.
+All three features are enabled by default and saved for each character. Change these settings outside combat.
 
 ## Usage
 
@@ -61,7 +59,7 @@ Cast **Power Word: Shield** on yourself to see the display. Shield yourself outs
 
 ## Installation
 
-Version **0.3.2** supports **WoW Forever 1.60.1**.
+Version **0.3.3** supports **WoW Forever 1.60.1**.
 
 1. Install PriestShieldTracker through the CurseForge app, or download the ZIP from this page.
 2. Extract both included folders into `World of Warcraft/_forever_/Interface/AddOns/`. The small settings importer preserves your previous layout.

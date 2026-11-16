@@ -1,4 +1,4 @@
--- Appearance lives in the native AddOns options; Edit Mode only handles layout.
+-- Appearance lives in AddOns options; Edit Mode handles layout and group visibility.
 local _, ns = ...
 local A = ns.Appearance
 local O = {}
@@ -10,11 +10,22 @@ local styles = { { "classic", "Classic" }, { "smooth", "Smooth" }, { "liquid", "
 
 local function Label(parent, text, size, x, y, colorKey)
     local label = parent:CreateFontString(nil, "OVERLAY")
-    label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, "")
+    label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, colorKey and "OUTLINE" or "")
+    if colorKey then label:SetShadowOffset(1, -1) end
     label:SetPoint("TOPLEFT", x, y)
     label:SetText(text)
     if colorKey then A.Text(label, colorKey) end
     return label
+end
+
+function O.Tooltip(widget, title, description)
+    widget:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title)
+        GameTooltip:AddLine(type(description) == "function" and description() or description, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
 function O.ClosePicker()
@@ -64,7 +75,7 @@ local function Button(caption, x, y, width, action)
     return button
 end
 
-local function Dropdown(caption, y, choices, getter, setter)
+local function Dropdown(caption, y, choices, getter, setter, description)
     Label(panel, caption, 13, 20, y - 7)
     local dropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
     dropdown:SetWidth(220); dropdown:SetPoint("TOPLEFT", 200, y)
@@ -78,6 +89,7 @@ local function Dropdown(caption, y, choices, getter, setter)
         end
     end)
     panel.widgets[#panel.widgets + 1] = dropdown
+    O.Tooltip(dropdown, caption, description)
     return dropdown
 end
 
@@ -87,10 +99,7 @@ function O.Refresh()
     panel.style:GenerateMenu(); panel.palette:GenerateMenu()
     panel.barColor.swatch:SetColorTexture(A.Color("absorb"))
     panel.textColor.swatch:SetColorTexture(A.Color("numbers"))
-    panel.showIcon:SetChecked(db.groupOptions.weakenedSoul.showIcon)
     panel.groupFrames:SetChecked(db.groupFrames.enabled)
-    panel.readyGroup:SetChecked(db.groupOptions.weakenedSoul.enabled)
-    panel.shieldGroup:SetChecked(db.groupOptions.shield.enabled)
     panel.groupOthers:SetChecked(ns.Native.ShowsOthers())
     panel.groupCorner:SetDefaultText(({ tl = "Top left", tr = "Top right", bl = "Bottom left", br = "Bottom right", c = "Center" })[db.groupFrames.corner])
     panel.groupSize:SetDefaultText(tostring(db.groupFrames.size) .. " px")
@@ -99,8 +108,9 @@ function O.Refresh()
     for _, widget in ipairs(panel.widgets) do widget:SetEnabled(not InCombatLockdown()) end
     panel.groupOthers:SetEnabled(not InCombatLockdown() and ns.Native.strategy ~= "all")
     panel.groupFrameNote:SetText(ns.Native.strategy == "all"
-        and "Exact filtering is available: every priest's Weakened Soul is included."
-        or "Other priests use matching debuff properties when exact filtering is restricted.")
+        and "Weakened Soul from every priest can be shown accurately."
+        or "Other debuffs can look like another priest's Weakened Soul. Off by default to avoid false alerts.")
+    panel.updateRaidPreview()
     panel.hint:SetText(InCombatLockdown() and "Appearance can be changed after combat."
         or "Changes save automatically for this character.")
 end
@@ -119,7 +129,7 @@ local function BuildPage()
     scroll:SetPoint("TOPLEFT", 0, -4)
     scroll:SetPoint("BOTTOMRIGHT", -28, 4)
     panel = CreateFrame("Frame", "PriestShieldTrackerOptions", scroll)
-    panel:SetSize(560, 810)
+    panel:SetSize(560, 808)
     scroll:SetScrollChild(panel)
     panel.widgets = {}
     Label(panel, "PriestShieldTracker", 22, 20, -16)
@@ -152,63 +162,97 @@ local function BuildPage()
     UpdateSample()
     sample:SetScript("OnUpdate", UpdateSample)
     panel.style = Dropdown("Bar style", -190, styles, function() return db.appearance.style end,
-        function(value) db.appearance.style = value; A.Apply() end)
+        function(value) db.appearance.style = value; A.Apply() end,
+        "Choose a Classic solid bar, a Smooth bar, or an animated Liquid bar. The preview shows your choice.")
     local palettes = {}
     for _, name in ipairs(A.presetNames) do palettes[#palettes + 1] = { name, name } end
     panel.palette = Dropdown("Color palette", -234, palettes, function() return db.appearance.preset end,
-        function(value) A.Preset(value) end)
+        function(value) A.Preset(value) end,
+        "Apply a set of matching bar and text colors. You can adjust them with Bar color and Text color.")
     Label(panel, "Custom colors", 13, 20, -285)
     panel.barColor = Button("Bar color", 200, -278, 105, function() ChooseColor("bar") end)
     panel.textColor = Button("Text color", 315, -278, 105, function() ChooseColor("text") end)
+    O.Tooltip(panel.barColor, "Bar color", "Change the fill color of both your absorb bar and shield expiration bar.")
+    O.Tooltip(panel.textColor, "Text color", "Change the labels, numbers, Shield Ready text, and crossed-out shield mark together.")
     for _, button in ipairs({ panel.barColor, panel.textColor }) do
         button.swatch = button:CreateTexture(nil, "OVERLAY")
         button.swatch:SetSize(12, 12); button.swatch:SetPoint("LEFT", 5, 0)
     end
-    panel.showIcon = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    panel.showIcon:SetSize(26, 26); panel.showIcon:SetPoint("TOPLEFT", 16, -324)
-    Label(panel.showIcon, "Show crossed-out shield icon", 12, 30, -6)
-    panel.widgets[#panel.widgets + 1] = panel.showIcon
-    panel.showIcon:SetScript("OnClick", function(self)
-        if not CanChange() then return end
-        db.groupOptions.weakenedSoul.showIcon = self:GetChecked() and true or false
-        callbacks.layout(); O.Refresh()
-    end)
-    local function Check(caption, x, y, action)
+    local function Check(caption, x, y, action, description, hitWidth)
         local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
         check:SetSize(26, 26); check:SetPoint("TOPLEFT", x, y)
+        check:SetHitRectInsets(0, -(hitWidth or 200), 0, 0)
         Label(check, caption, 12, 30, -6)
         panel.widgets[#panel.widgets + 1] = check
         check:SetScript("OnClick", function(self)
             if not CanChange() then return end
             action(self:GetChecked() and true or false); ns.GroupFrames.Configure(); callbacks.layout(); O.Refresh()
         end)
+        O.Tooltip(check, caption, description)
         return check
     end
-    Label(panel, "Party and raid frames", 14, 20, -366)
-    panel.groupFrames = Check("Show Weakened Soul icons", 16, -390, function(value) db.groupFrames.enabled = value end)
-    panel.groupOthers = Check("Include other priests", 260, -390, function(value) db.groupFrames.showOthers = value end)
-    panel.groupFrameNote = Label(panel, "", 10, 20, -423)
-    panel.groupCorner = Dropdown("Icon position", -448,
+    Label(panel, "Party and raid frames", 14, 20, -324)
+    panel.groupFrames = Check("Show Weakened Soul icons", 16, -348, function(value) db.groupFrames.enabled = value end,
+        "Show Weakened Soul on Blizzard party and raid frames after you shield someone. The countdown shows when they can receive another shield.")
+    panel.groupOthers = Check("Include other priests", 260, -348, function(value) db.groupFrames.showOthers = value end,
+        function()
+            if ns.Native.strategy == "all" then
+                return "Weakened Soul from every priest is already included accurately. Yours have a red border; other priests' have a purple border."
+            end
+            return "Also show Weakened Soul from other priests, with a purple border. Yours have a red border. Off by default because some other debuffs can look like their Weakened Soul."
+        end, 160)
+    panel.groupFrameNote = Label(panel, "", 11, 20, -381)
+    panel.groupFrameNote:SetWidth(400); panel.groupFrameNote:SetJustifyH("LEFT")
+    panel.groupCorner = Dropdown("Icon position", -430,
         { { "tr", "Top right" }, { "tl", "Top left" }, { "br", "Bottom right" }, { "bl", "Bottom left" }, { "c", "Center" } },
-        function() return db.groupFrames.corner end, function(value) db.groupFrames.corner = value; ns.GroupFrames.Configure() end)
-    panel.groupSize = Dropdown("Icon size", -484, { { 12, "12 px" }, { 16, "16 px" }, { 20, "20 px" }, { 24, "24 px" }, { 32, "32 px" } },
-        function() return db.groupFrames.size end, function(value) db.groupFrames.size = value; ns.GroupFrames.Configure() end)
-    panel.groupTime = Dropdown("Countdown", -520, { { "seconds", "Seconds (5s)" }, { "number", "Number (5)" }, { "icon", "Icon only" } },
-        function() return db.groupFrames.timeFormat end, function(value) db.groupFrames.timeFormat = value; ns.GroupFrames.Configure() end)
-    panel.groupSoon = Dropdown("Turn green at", -556, { { 0, "Off" }, { 1, "1 second" }, { 2, "2 seconds" }, { 3, "3 seconds" }, { 5, "5 seconds" } },
-        function() return db.groupFrames.soonReady end, function(value) db.groupFrames.soonReady = value; ns.GroupFrames.Configure() end)
-    Label(panel, "Display features", 14, 20, -602)
-    panel.readyGroup = Check("Shield Ready and Weakened Soul countdown", 16, -628,
-        function(value) db.groupOptions.weakenedSoul.enabled = value end)
-    panel.shieldGroup = Check("Absorb shield and shield expiring bars", 16, -660,
-        function(value) db.groupOptions.shield.enabled = value end)
-    panel.editButton = Button("Edit layout", 20, -718, 190, EditLayout)
-    panel.resetButton = Button("Reset appearance", 230, -718, 190, function()
+        function() return db.groupFrames.corner end, function(value) db.groupFrames.corner = value; ns.GroupFrames.Configure() end,
+        "Choose the corner or center of each party or raid frame where the Weakened Soul icon appears.")
+    panel.groupSize = Dropdown("Icon size", -466, { { 12, "12 px" }, { 16, "16 px" }, { 20, "20 px" }, { 24, "24 px" }, { 32, "32 px" } },
+        function() return db.groupFrames.size end, function(value) db.groupFrames.size = value; ns.GroupFrames.Configure() end,
+        "Set the size of the Weakened Soul icons on party and raid frames. The sample frames below update immediately.")
+    panel.groupTime = Dropdown("Countdown", -502, { { "seconds", "Seconds (5s)" }, { "number", "Number (5)" }, { "icon", "Icon only" } },
+        function() return db.groupFrames.timeFormat end, function(value) db.groupFrames.timeFormat = value; ns.GroupFrames.Configure() end,
+        "Show seconds with an s, just the number, or only the icon and its cooldown swipe.")
+    panel.groupSoon = Dropdown("Turn green at", -538, { { 0, "Off" }, { 1, "1 second" }, { 2, "2 seconds" }, { 3, "3 seconds" }, { 5, "5 seconds" } },
+        function() return db.groupFrames.soonReady end, function(value) db.groupFrames.soonReady = value; ns.GroupFrames.Configure() end,
+        "Turn the countdown text green when less than this much time remains before the player can receive another shield. Off keeps it white; Icon only hides the text.")
+    Label(panel, "Raid frame preview", 14, 20, -576)
+    local raidSample = CreateFrame("Frame", nil, panel)
+    raidSample:SetPoint("TOPLEFT", 20, -602); raidSample:SetSize(400, 94)
+    panel.raidPreview = {}
+    for index, key in ipairs({ "mine", "others" }) do
+        local card = CreateFrame("Frame", nil, raidSample)
+        card:SetSize(190, 50); card:SetPoint("TOPLEFT", (index - 1) * 210, 0)
+        local background = card:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints(); background:SetColorTexture(0.025, 0.025, 0.025, 1)
+        local health = card:CreateTexture(nil, "ARTWORK")
+        health:SetPoint("TOPLEFT", 1, -1); health:SetSize(188, 48)
+        health:SetColorTexture(0.08, 0.3, 0.16, 1)
+        Label(card, index == 1 and "Party member" or "Raid member", 11, 7, -8)
+        Label(card, "100%", 10, 7, -30)
+        Label(raidSample, index == 1 and "Your shield" or "Other priest", 11, (index - 1) * 210, -58)
+        panel.raidPreview[key] = ns.Native.CreatePreview(card, key)
+    end
+    Label(raidSample, "Sample players and timers", 10, 0, -80)
+    local sampleStarted, sampleElapsed = GetTime(), 0
+    panel.updateRaidPreview = function()
+        local remaining = 15 - ((GetTime() - sampleStarted) % 15)
+        for _, handle in pairs(panel.raidPreview) do ns.Native.UpdatePreview(handle, remaining) end
+    end
+    raidSample:SetScript("OnUpdate", function(_, dt)
+        sampleElapsed = sampleElapsed + dt
+        if sampleElapsed < 0.1 then return end
+        sampleElapsed = 0; panel.updateRaidPreview()
+    end)
+    panel.editButton = Button("Edit layout", 20, -726, 190, EditLayout)
+    panel.resetButton = Button("Reset appearance", 230, -726, 190, function()
         O.ClosePicker(); db.appearance.style = "liquid"; A.Preset("Soul")
         db.groupOptions.weakenedSoul.showIcon = true
         callbacks.layout(); O.Refresh()
     end)
-    panel.hint = Label(panel, "", 11, 20, -760)
+    O.Tooltip(panel.editButton, "Edit layout", "Move and resize each personal display group. Click a group to turn it on or off with its Enabled checkbox.")
+    O.Tooltip(panel.resetButton, "Reset appearance", "Restore Liquid bars, the Soul palette, and the crossed-out shield icon. Your layout and enabled groups stay as they are.")
+    panel.hint = Label(panel, "", 11, 20, -768)
     panel:SetScript("OnShow", O.Refresh)
     panel:SetScript("OnHide", O.ClosePicker)
     canvas:SetScript("OnShow", O.Refresh)
@@ -221,6 +265,15 @@ function O.Open()
     if not category then callbacks.print("AddOns options are not available on this client."); return end
     callbacks.prepare()
     Settings.OpenToCategory(category:GetID())
+end
+
+function O.Toggle()
+    if panel and panel:IsVisible() and SettingsPanel and SettingsPanel:IsShown() then
+        O.ClosePicker()
+        HideUIPanel(SettingsPanel)
+    else
+        O.Open()
+    end
 end
 
 local function BuildMinimapButton()
@@ -260,11 +313,11 @@ local function BuildMinimapButton()
     button:SetScript("OnClick", function(_, mouseButton)
         if button.dragged then button.dragged = false; return end
         if mouseButton == "RightButton" then EditLayout(true)
-        elseif mouseButton == "LeftButton" then O.Open() end
+        elseif mouseButton == "LeftButton" then O.Toggle() end
     end)
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT"); GameTooltip:SetText("PriestShieldTracker")
-        GameTooltip:AddLine("Left-click: Settings", 1, 1, 1)
+        GameTooltip:AddLine("Left-click: Toggle settings", 1, 1, 1)
         GameTooltip:AddLine("Right-click: Toggle Edit Mode (Shield Ready)", 1, 1, 1)
         GameTooltip:AddLine("Drag to move around the minimap", 0.7, 0.7, 0.7)
         GameTooltip:Show()

@@ -26,7 +26,9 @@ The menu starts hidden and follows the selected group. Clicking outside both the
 
 Drag the **PriestShieldTracker** title bar to move the settings panel. It stays within the screen and remembers its position across reloads. Moving the menu does not move either display group.
 
-Both groups have independent **Group size** and **Text size** controls. The Shield Ready group also has **Icon size** and **Show crossed-out shield icon** controls. The absorb group has **Bar width** and **Bar height** controls. **Reset group** restores only the selected group's appearance and position. **Save** finishes editing and closes Edit Mode.
+Both groups have independent **Enabled**, **Group size**, and **Text size** controls in their Edit Mode windows. The Shield Ready group also has **Icon size** and **Show crossed-out shield icon**. The absorb group has **Bar width** and **Bar height** controls. Turning **Enabled** off hides that group during play, while its labeled selection area remains available in Edit Mode so you can turn it back on. **Reset group** enables the selected group and restores its default sizes and position while keeping the icon visibility choice. **Save** finishes editing and closes Edit Mode.
+
+Left-click the minimap shield to open settings; left-click again to close them. Right-click toggles Edit Mode.
 
 ![PriestShieldTracker Edit Mode showing movable priest shield groups and text, icon, and group size settings](images/priestshieldtracker-edit-mode.png)
 
@@ -74,6 +76,8 @@ The default is a 16-pixel icon in the top-right corner of Blizzard party and rai
 
 The **Party and raid frames** section in AddOns options controls visibility, corner, size, countdown format, and green countdown threshold. Other priests' applications retain the upstream purple border. With exact spell filtering available, all priests are shown. Otherwise only your own applications are shown by default; **Include other priests** enables property matching for theirs, which can also match some monster debuffs. The personal HUD's existing self-shield filter is unchanged.
 
+Hover over settings and Edit Mode controls for explanations. AddOns options includes sample party/raid frames with animated Weakened Soul icons and timers. The samples follow the icon visibility, other-priest option, corner, size, countdown format, and green threshold immediately; the other-priest sample icon is hidden while that option is off. These are fictional players and timers, independent of real group activity.
+
 ## Aura and absorb data
 
 Native AuraContainer slots draw the actual aura timers without Lua inspecting restricted combat aura values. Helpful shield filtering includes the ten Classic Power Word: Shield ranks. Harmful aura identity filters are restricted on friendly units unless the spell is marked NeverSecret. When necessary, the Weakened Soul slot instead selects your own short, non-dispellable, non-boss debuff. This targets solo self-shielding; another priest's Weakened Soul may not be shown under that fallback, and another debuff with identical properties may appear. The custom label reads Shield Ready; the game supplies the countdown.
@@ -116,7 +120,3 @@ No code or artwork from the reference addons is bundled.
 ## License
 
 Copyright (c) 2026 Baeleaf. **All Rights Reserved.** Personal installation and use are permitted. See [LICENSE](../LICENSE) for the full notice.
-
-## Feature switches
-
-Open `/pst settings` to independently disable Weakened Soul icons on Blizzard party/raid frames, the Shield Ready/countdown group, or the absorb/expiration bars. All are enabled by default and saved per character. Hidden groups stay hidden in Edit Mode and test previews. Settings can be changed outside combat. Appearance resets preserve feature choices; `/pst reset` restores the HUD groups.

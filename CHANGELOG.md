@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3 - November 16, 2026
+
+- Improve preview text readability so it matches the live display, including bright Holy bars.
+- Add hover explanations and clarify why tracking other priests is off by default.
+- Add sample raid frames that preview icon position, size, borders, cooldown swipes, and countdown colors.
+- Move each personal display's Enabled checkbox into its Edit Mode window. Disabled groups remain selectable so you can turn them back on.
+- Move Show crossed-out shield icon into the Shield Ready Edit Mode window.
+- Left-click the minimap shield to open or close settings.
+
 ## 0.3.2 - November 16, 2026
 
 - Fix forbidden-object errors after dungeon combat by deferring layout and color changes while Blizzard's aura objects remain locked.

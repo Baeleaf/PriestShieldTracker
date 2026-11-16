@@ -172,6 +172,43 @@ local function BorderColor(key)
     return c.r, c.g, c.b, c.a
 end
 
+-- Ordinary sample frames use the same placement, colors and icon styling as
+-- live indicators. They never attach to units or read any real aura data.
+function Native.CreatePreview(parent, key)
+    local h = { container = parent, key = key,
+        corner = function() return db.corner end, size = function() return db.size end }
+    local button = CreateFrame("Frame", nil, parent)
+    button:SetFrameLevel(parent:GetFrameLevel() + 12)
+    button:EnableMouse(false)
+    h.button = button
+    h.border = button:CreateTexture(nil, "BACKGROUND")
+    h.border:SetPoint("TOPLEFT", -1, 1); h.border:SetPoint("BOTTOMRIGHT", 1, -1)
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints(); icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon:SetTexture(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)
+        or "Interface\\Icons\\Spell_Holy_AshesToAshes")
+    h.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+    h.cooldown:SetAllPoints(); h.cooldown:SetDrawEdge(false); h.cooldown:SetHideCountdownNumbers(true)
+    h.cooldown:EnableMouse(false)
+    local textLayer = CreateFrame("Frame", nil, button)
+    textLayer:SetAllPoints(); textLayer:SetFrameLevel(h.cooldown:GetFrameLevel() + 1)
+    h.text = textLayer:CreateFontString(nil, "OVERLAY")
+    h.text:SetPoint("CENTER"); h.text:SetShadowOffset(1, -1)
+    return h
+end
+
+function Native.UpdatePreview(h, remaining)
+    PlaceButton(h, h.button)
+    h.button:SetShown(db.enabled and (h.key == "mine" or ShowsOthers()))
+    h.border:SetColorTexture(BorderColor(h.key)); h.border:SetShown(db.showBorder)
+    h.cooldown:SetCooldown(GetTime() - (15 - remaining), 15)
+    h.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", db.size >= 20 and 12 or 10, "OUTLINE")
+    local format = db.timeFormat
+    h.text:SetText(format == "icon" and "" or tostring(math.ceil(remaining)) .. (format == "seconds" and "s" or ""))
+    local color = db.soonReady > 0 and remaining < db.soonReady and SOON_COLOR or NORMAL_COLOR
+    h.text:SetTextColor(unpack(color))
+end
+
 local function MakeInitializer(h, key, withText)
     return function(button)
         -- the icon must never block clicks on the unit frame (targeting,

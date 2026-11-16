@@ -121,7 +121,9 @@ local function LayoutParts()
         local width = key == "weakenedSoul" and ReadyWidth() or db.width
         local height = key == "weakenedSoul" and math.max(26 * options.fontSize / 16, options.showIcon and options.iconSize + 6 or 0) or db.barHeight + 28
         handle:SetSize(width * options.scale, height * options.scale)
-        handle:SetShown(not db.locked and options.enabled)
+        -- Disabled groups stay selectable in Edit Mode so they can be enabled again.
+        handle:SetShown(not db.locked)
+        handle.disabledText:SetShown(not db.locked and not options.enabled)
     end
 end
 
@@ -405,6 +407,9 @@ local function BuildHandles()
         handle.selection = background
         background:SetAllPoints()
         background:SetColorTexture(0.65, 0.45, 1, 0.18)
+        handle.disabledText = Text(handle, 11, 0.85, 0.83, 0.9)
+        handle.disabledText:SetPoint("CENTER")
+        handle.disabledText:SetText("Disabled - click for settings")
         handle:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(spec.title .. ": drag to move, click for settings")
@@ -501,6 +506,14 @@ local function AddSettingsSlider(panel, key, caption, low, high, step, y, format
         slider.caption:SetText(caption .. ": " .. string.format(format, value))
         Layout()
     end)
+    local descriptions = {
+        groupScale = "Resize this entire display group, including its text and icons.",
+        fontSize = "Change the text size for this display group.",
+        width = "Change the width of the absorb and shield expiration bars.",
+        barHeight = "Change the height of the absorb bar.",
+        iconSize = "Change the size of the crossed-out shield beside your personal Weakened Soul countdown.",
+    }
+    ns.Options.Tooltip(slider, caption, descriptions[key])
     return slider
 end
 
@@ -554,19 +567,50 @@ local function BuildSettingsPanel()
     title:SetPoint("CENTER", 0, -4); title:SetText("PriestShieldTracker")
     panel.subtitle = Text(panel, 12, 0.8, 0.78, 0.86)
     panel.subtitle:SetPoint("TOP", 0, -44)
-    AddSettingsSlider(panel, "groupScale", "Group size", 50, 200, 5, -74, "%d%%",
+    local enabled = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    panel.controls.enabled = enabled
+    enabled:SetSize(26, 26); enabled:SetPoint("TOPLEFT", 18, -64)
+    enabled:SetHitRectInsets(0, -70, 0, 0)
+    local enabledLabel = Text(enabled, 12)
+    enabledLabel:SetPoint("LEFT", enabled, "RIGHT", 4, 0); enabledLabel:SetText("Enabled")
+    enabled.refresh = function() enabled:SetChecked(db.groupOptions[selectedGroup].enabled) end
+    enabled:SetScript("OnClick", function(self)
+        if updatingControls or InCombatLockdown() or db.locked then return end
+        db.groupOptions[selectedGroup].enabled = self:GetChecked() and true or false
+        Layout(); TickPreview()
+    end)
+    ns.Options.Tooltip(enabled, "Enabled", function()
+        return selectedGroup == "shield"
+            and "Show your remaining absorption and Power Word: Shield duration bars. Turn this off to hide both bars during play. You can still select this group in Edit Mode to turn it back on."
+            or "Show your personal Weakened Soul countdown and Shield Ready indicator. Turn this off to hide this group during play. You can still select it in Edit Mode to turn it back on."
+    end)
+    AddSettingsSlider(panel, "groupScale", "Group size", 50, 200, 5, -108, "%d%%",
         function() return db.groupOptions[selectedGroup].scale * 100 end,
         function(value) db.groupOptions[selectedGroup].scale = value / 100 end)
-    AddSettingsSlider(panel, "fontSize", "Text size", 9, 28, 1, -124, "%d",
+    AddSettingsSlider(panel, "fontSize", "Text size", 9, 28, 1, -158, "%d",
         function() return db.groupOptions[selectedGroup].fontSize end,
         function(value) db.groupOptions[selectedGroup].fontSize = value end)
-    AddSettingsSlider(panel, "width", "Bar width", 180, 500, 5, -174, "%d",
+    AddSettingsSlider(panel, "width", "Bar width", 180, 500, 5, -208, "%d",
         function() return db.width end, function(value) db.width = value end)
-    AddSettingsSlider(panel, "barHeight", "Bar height", 12, 40, 1, -224, "%d",
+    AddSettingsSlider(panel, "barHeight", "Bar height", 12, 40, 1, -258, "%d",
         function() return db.barHeight end, function(value) db.barHeight = value end)
-    AddSettingsSlider(panel, "iconSize", "Icon size", 12, 40, 1, -174, "%d",
+    AddSettingsSlider(panel, "iconSize", "Icon size", 12, 40, 1, -208, "%d",
         function() return db.groupOptions.weakenedSoul.iconSize end,
         function(value) db.groupOptions.weakenedSoul.iconSize = value end)
+    local showIcon = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    panel.controls.showIcon = showIcon
+    showIcon:SetSize(26, 26); showIcon:SetPoint("TOPLEFT", 18, -254)
+    showIcon:SetHitRectInsets(0, -230, 0, 0)
+    local iconLabel = Text(showIcon, 12)
+    iconLabel:SetPoint("LEFT", showIcon, "RIGHT", 4, 0)
+    iconLabel:SetText("Show crossed-out shield icon")
+    showIcon.refresh = function() showIcon:SetChecked(db.groupOptions.weakenedSoul.showIcon) end
+    showIcon:SetScript("OnClick", function(self)
+        if updatingControls or InCombatLockdown() or db.locked or selectedGroup ~= "weakenedSoul" then return end
+        db.groupOptions.weakenedSoul.showIcon = self:GetChecked() and true or false
+        Layout(); TickPreview()
+    end)
+    ns.Options.Tooltip(showIcon, "Crossed-out shield icon", "Show a crossed-out shield beside your personal countdown while Weakened Soul prevents you from shielding yourself again.")
     local help = Text(panel, 11, 0.75, 0.73, 0.8)
     help:SetPoint("BOTTOM", 0, 65)
     help:SetText("Drag a group to move it.\nChanges save automatically for this character.")
@@ -588,6 +632,8 @@ local function BuildSettingsPanel()
     save:SetSize(124, 26); save:SetPoint("BOTTOMRIGHT", -20, 20)
     save:SetText("Save")
     save:SetScript("OnClick", function() CloseEditMode() end)
+    ns.Options.Tooltip(reset, "Reset group", "Enable this group and restore its default position and sizes. The other group stays as it is.")
+    ns.Options.Tooltip(save, "Save", "Finish editing and return to your live display. Changes are saved for this character.")
     panel:Hide()
 end
 
@@ -605,7 +651,8 @@ ShowSettings = function(group)
     controls.width:SetShown(selectedGroup == "shield")
     controls.barHeight:SetShown(selectedGroup == "shield")
     controls.iconSize:SetShown(selectedGroup == "weakenedSoul")
-    settingsPanel:SetHeight(selectedGroup == "shield" and 370 or 320)
+    controls.showIcon:SetShown(selectedGroup == "weakenedSoul")
+    settingsPanel:SetHeight(selectedGroup == "shield" and 404 or 394)
     settingsPanel.subtitle:SetText(selectedGroup == "shield" and "Absorb display" or "Shield Ready")
     updatingControls = false
     settingsPanel:Show()

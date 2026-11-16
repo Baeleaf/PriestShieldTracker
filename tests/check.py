@@ -33,8 +33,10 @@ Enum = { SecrecyLevel = { NeverSecret = 0 }, StatusBarTimerDirection = { Remaini
     DurationTextBindingProperty = { RemainingDuration = 1 } }
 CustomAuraContainerSlotDefaultOptions = {}
 C_AuraContainerUtil = {}
-GameTooltip = { SetOwner = function() end, SetText = function() end, AddLine = function() end,
-    Show = function() end, Hide = function() end }
+GameTooltip = { SetOwner = function(self, owner) self.owner = owner end,
+    SetText = function(self, text) self.title = text end,
+    AddLine = function(self, text) self.description = text end,
+    Show = function(self) self.shown = true end, Hide = function(self) self.shown = false end }
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, text) table.insert(messages, text) end }
 function UnitClass() return class, class end
 function InCombatLockdown() return combat end
@@ -140,6 +142,14 @@ function Frame:Choose(text)
 end
 function Frame:EnableMouse(v) self.mouse = v end
 function Frame:SetScript(event, fn) self.scripts[event] = fn end
+function Frame:HookScript(event, fn)
+    local previous = self.scripts[event]
+    self.scripts[event] = function(...)
+        if previous then previous(...) end
+        fn(...)
+    end
+end
+function Frame:SetHitRectInsets(...) self.hitRectInsets = {...} end
 function Frame:GetScript(event) return self.scripts[event] end
 function Frame:RegisterEvent(event) self.events[event] = true end
 function Frame:RegisterUnitEvent(event, unit) self.events[event] = unit end
@@ -167,9 +177,9 @@ function Frame:SetVertexColor(...) self.vertexColor = {...} end
 function Frame:SetBlendMode(value) self.blend = value end
 function Frame:SetTexture(value) self.asset = value end
 function Frame:SetTexCoord(...) self.texCoord = {...} end
-function Frame:SetFont(font, size, flags) RequireWritable(self); self.fontSize = size end
+function Frame:SetFont(font, size, flags) RequireWritable(self); self.fontSize = size; self.fontFlags = flags end
 function Frame:SetTextColor(...) RequireWritable(self); self.textColor = {...} end
-function Frame:SetShadowOffset(...) end
+function Frame:SetShadowOffset(...) self.shadowOffset = {...} end
 function Frame:SetJustifyH(value) self.justifyH = value end
 function Frame:SetText(v) self.text = v end
 function Frame:SetFormattedText(fmt, v)
@@ -226,6 +236,7 @@ function Frame:SetSpellName(v) assert(v.parent == self); self.spellName = v end
 function Frame:SetIcon(v) assert(v.parent == self); self.icon = v end
 function Frame:SetDurationCooldown(v) assert(v.parent == self); self.cooldown = v end
 function Frame:SetDrawEdge(v) self.drawEdge = v end
+function Frame:SetCooldown(start, duration) self.cooldownStart = start; self.cooldownDuration = duration end
 function Frame:SetHideCountdownNumbers(v) self.hideCountdownNumbers = v end
 function Frame:SetAuraSlotEnabled(key, enabled) self.slots[key].enabled = enabled end
 function Frame:SetUnit(v) self.unit = v end
@@ -356,9 +367,14 @@ end
     return lua
 
 
+cases_run = 0
+
+
 def case(name, setup, assertions):
+    global cases_run
     lua = new(setup)
     lua.execute(assertions)
+    cases_run += 1
     print("PASS", name)
 
 
@@ -699,7 +715,7 @@ assert(label.fontSize == 30 and ws.durationText.fontSize == 33.75)
 assert(label.points[1][4] == -51)
 assert(sample.readyIcon.width == 42 and sample.readyIcon.points[1][3] == "RIGHT")
 assert(sample.readyIcon.points[1][4] == 9)
-assert(controls.showIcon == nil and PriestShieldTrackerEditSettings.appearanceButton == nil)
+assert(controls.showIcon:IsVisible() and PriestShieldTrackerEditSettings.appearanceButton == nil)
 ''')
 case("clicking absorb group selects independent size and text controls", "EnableNativeEditMode()", r'''
 Command("edit")
@@ -908,7 +924,7 @@ assert(not PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings:IsVi
 assert(PriestShieldTrackerEditSettings.subtitle.text == "Shield Ready")
 assert(PriestShieldTrackerEditSettings.controls.fontSize:IsVisible() and PriestShieldTrackerEditSettings.controls.iconSize:IsVisible())
 assert(not PriestShieldTrackerEditSettings.controls.width:IsVisible())
-assert(PriestShieldTrackerEditSettings.controls.showIcon == nil and PriestShieldTrackerEditSettings.appearanceButton == nil)
+assert(PriestShieldTrackerEditSettings.controls.showIcon:IsVisible() and PriestShieldTrackerEditSettings.appearanceButton == nil)
 for _, f in ipairs(frames) do
     if f.groupKey == "weakenedSoul" then assert(f.selection.color[4] == 0.36) end
 end
@@ -942,18 +958,26 @@ case("minimap restores saved position and repairs invalid angles", "PriestShield
 assert(PriestShieldTrackerDB.minimapAngle == 30)
 assert(math.abs(PriestShieldTrackerMinimapButton.points[1][5] - 39) < 0.001)
 ''')
-case("icon visibility lives in Options and layout reset preserves it", "EnableNativeEditMode()", r'''
+case("icon visibility lives only in Shield Ready Edit Mode and reset preserves it", "EnableNativeEditMode()", r'''
 Command("settings")
-local check = PriestShieldTrackerOptions.showIcon
+assert(PriestShieldTrackerOptions.showIcon == nil)
+PriestShieldTrackerOptions.editButton.scripts.OnClick()
+local check = PriestShieldTrackerEditSettings.controls.showIcon
+assert(check:IsVisible() and check:GetChecked())
 check:SetChecked(false); check.scripts.OnClick(check)
 assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon)
-PriestShieldTrackerOptions.editButton.scripts.OnClick()
 assert(not sample.readyIcon.shown and not sample.readyCross.shown)
 PriestShieldTrackerEditSettings.resetButton.scripts.OnClick()
 assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon and not sample.readyIcon.shown)
-Command("settings"); check:SetChecked(true); check.scripts.OnClick(check)
-PriestShieldTrackerOptions.editButton.scripts.OnClick()
+ClickGroup("shield"); assert(not check:IsVisible())
+check:SetChecked(true); check.scripts.OnClick(check)
+assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon)
+ClickGroup("weakenedSoul"); assert(not check:GetChecked())
+check:SetChecked(true); check.scripts.OnClick(check)
 assert(sample.readyIcon.shown and sample.readyCross.shown)
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+check:SetChecked(false); check.scripts.OnClick(check)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon)
 ''')
 case("simplified bar color edits both bars and Cancel restores their distinct colors", "", r'''
 ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
@@ -1062,8 +1086,10 @@ combat = true; Fire("PLAYER_REGEN_DISABLED")
 combat = false; Fire("PLAYER_REGEN_ENABLED")
 Command("width 390"); Command("settings")
 PriestShieldTrackerOptions.palette:Choose("Holy")
-PriestShieldTrackerOptions.showIcon:SetChecked(false)
-PriestShieldTrackerOptions.showIcon.scripts.OnClick(PriestShieldTrackerOptions.showIcon)
+PriestShieldTrackerOptions.editButton.scripts.OnClick()
+PriestShieldTrackerEditSettings.controls.showIcon:SetChecked(false)
+PriestShieldTrackerEditSettings.controls.showIcon.scripts.OnClick(PriestShieldTrackerEditSettings.controls.showIcon)
+Command("lock")
 for i = 1, 30 do Tick(0.1) end
 assert(BlockedWrites() == 0 and shield.durationBar.width == originalWidth)
 absorb = secret; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
@@ -1183,62 +1209,125 @@ assert(ct.slots.others.options.candidateFilters.includeSpellIDs[6788] and ct.slo
 case("non-priests never attach group indicators", GROUP_SETUP + '\nclass = "WARRIOR"', r'''
 assert(GroupContainer(CompactPartyFrameMember1) == nil and PriestShieldTrackerDB == nil)
 ''')
-case("HUD feature switches are independent and survive preview combat and appearance reset", "", r'''
+case("settings preview retains live text contrast across every palette", "", r'''
 Command("settings")
-local p, ct = PriestShieldTrackerOptions, Find("AuraContainer")
-local function Switch(widget, value) widget:SetChecked(value); widget.scripts.OnClick(widget) end
-Switch(p.readyGroup, false)
-assert(not ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled and bar.parent.parent.shown)
-Command("test")
-assert(not sample.ws.shown and not sample.wsTime.shown and not sample.readyIcon.shown and sample.absorb.shown)
-Command("test"); Command("settings")
-Switch(p.shieldGroup, false)
-assert(not ct.slots.shield.enabled and not bar.parent.parent.shown)
-p.resetButton.scripts.OnClick()
-assert(not p.readyGroup.checked and not p.shieldGroup.checked)
-Command("test")
-assert(not sample.absorb.shown and not sample.duration.shown and not sample.label.shown and not sample.time.shown)
-combat = true; Fire("PLAYER_REGEN_DISABLED"); absorb = secret; Tick(0.1)
-assert(not bar.parent.parent.shown and BlockedWrites() == 0)
-combat = false; Fire("PLAYER_REGEN_ENABLED"); Command("settings")
-Switch(p.readyGroup, true)
-assert(ct.slots.weakenedSoul.enabled and not ct.slots.shield.enabled and not bar.parent.parent.shown)
-Switch(p.shieldGroup, true)
-assert(ct.slots.shield.enabled and bar.parent.parent.shown)
+local panel = PriestShieldTrackerOptions
+local label = FindText(panel.previewAbsorb.parent, "Absorb")
+-- FindText checks direct children; bar text is deliberately in its own overlay.
+for _, frame in ipairs(frames) do
+    if frame.parent and frame.parent.parent == panel.previewAbsorb and frame.text == "Absorb" then label = frame end
+end
+assert(label and label.fontFlags == "OUTLINE" and label.shadowOffset[1] == 1 and label.shadowOffset[2] == -1)
+assert(label.parent:GetFrameLevel() > panel.previewAbsorb.liquid.clip:GetFrameLevel())
+for _, choice in ipairs(panel.palette.choices) do
+    choice.action()
+    assert(label.textColor[1] == bar.absorbLabel.textColor[1])
+    assert(label.textColor[2] == bar.absorbLabel.textColor[2])
+    assert(label.textColor[3] == bar.absorbLabel.textColor[3])
+end
 ''')
-case("saved disabled HUD groups remain hidden on login and in Edit Mode", r'''
+case("sample raid icons follow settings and their own timer without real units", GROUP_SETUP, r'''
+Command("settings")
+local panel = PriestShieldTrackerOptions
+local mine, others = panel.raidPreview.mine, panel.raidPreview.others
+assert(mine.button:IsVisible() and not others.button:IsVisible())
+assert(mine.button.mouse == false and mine.cooldown.mouse == false)
+assert(mine.cooldown.cooldownDuration == 15 and mine.text.text == "15s")
+panel.groupOthers:SetChecked(true); panel.groupOthers.scripts.OnClick(panel.groupOthers)
+assert(others.button:IsVisible() and others.border.color[3] == 1)
+panel.groupCorner:Choose("Bottom left"); panel.groupSize:Choose("24 px")
+assert(mine.button.width == 24 and mine.button.points[1][1] == "BOTTOMLEFT")
+panel.groupTime:Choose("Number (5)")
+clock = clock + 13; Tick(0.2)
+assert(mine.text.text == "2" and mine.text.textColor[2] == 1 and mine.text.textColor[1] == 0.25)
+panel.groupSoon:Choose("Off")
+assert(mine.text.textColor[1] == 1)
+panel.groupTime:Choose("Icon only"); assert(mine.text.text == "")
+panel.groupFrames:SetChecked(false); panel.groupFrames.scripts.OnClick(panel.groupFrames)
+assert(not mine.button:IsVisible() and not others.button:IsVisible())
+panel.groupFrames:SetChecked(true); panel.groupFrames.scripts.OnClick(panel.groupFrames)
+assert(mine.button:IsVisible() and others.button:IsVisible())
+assert(GroupContainer(CompactPartyFrameMember1).slots.mine.button.width == 24)
+assert(mine.container.unit == nil and mine.button.kind == "Frame")
+''')
+case("Edit Mode enables groups independently and disabled groups stay reachable", "EnableNativeEditMode()", r'''
+Command("settings")
+assert(PriestShieldTrackerOptions.readyGroup == nil and PriestShieldTrackerOptions.shieldGroup == nil)
+PriestShieldTrackerOptions.editButton.scripts.OnClick()
+local panel = PriestShieldTrackerEditSettings
+local check = panel.controls.enabled
+assert(check:GetChecked())
+check:SetChecked(false); check.scripts.OnClick(check)
+assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.enabled and not sample.ws.shown)
+assert(PriestShieldTrackerDB.groupOptions.shield.enabled and sample.absorb.shown)
+local ready
+for _, frame in ipairs(frames) do if frame.groupKey == "weakenedSoul" then ready = frame end end
+assert(ready:IsVisible() and ready.disabledText:IsVisible())
+ClickGroup("shield"); assert(check:GetChecked())
+check:SetChecked(false); check.scripts.OnClick(check)
+assert(not sample.absorb.shown and not bar.parent.parent.shown)
+ClickGroup("weakenedSoul"); assert(not check:GetChecked())
+check:SetChecked(true); check.scripts.OnClick(check)
+assert(sample.ws.shown and not ready.disabledText.shown and not sample.absorb.shown)
+panel.saveButton.scripts.OnClick()
+assert(PriestShieldTrackerDB.locked and not ready:IsVisible())
+assert(Find("AuraContainer").slots.weakenedSoul.enabled and not Find("AuraContainer").slots.shield.enabled)
+Command("edit"); ClickGroup("shield"); assert(not check:GetChecked())
+check:SetChecked(true); check.scripts.OnClick(check)
+assert(sample.absorb.shown and bar.parent.parent.shown)
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+check:SetChecked(false); check.scripts.OnClick(check)
+assert(PriestShieldTrackerDB.groupOptions.shield.enabled and not panel:IsVisible())
+''')
+case("hover help explains controls and clears on leaving", "", r'''
+Command("settings")
+local panel = PriestShieldTrackerOptions
+for _, widget in ipairs(panel.widgets) do
+    assert(widget.scripts.OnEnter and widget.scripts.OnLeave)
+    widget.scripts.OnEnter(widget)
+    assert(GameTooltip.shown and GameTooltip.owner == widget and #GameTooltip.description > 15)
+    widget.scripts.OnLeave(widget); assert(not GameTooltip.shown)
+end
+panel.editButton.scripts.OnClick()
+for _, control in pairs(PriestShieldTrackerEditSettings.controls) do
+    control.scripts.OnEnter(control)
+    assert(GameTooltip.shown and #GameTooltip.description > 15)
+    control.scripts.OnLeave(control)
+end
+''')
+case("saved disabled groups remain configurable and preview safe under aura locks", GROUP_SETUP + r'''
 PriestShieldTrackerDB = { groupOptions = { weakenedSoul = { enabled = false }, shield = { enabled = false } } }
 ''', r'''
-local ct = Find("AuraContainer")
-assert(not ct.slots.weakenedSoul.enabled and not ct.slots.shield.enabled and not bar.parent.parent.shown)
 Command("edit")
-for _, f in ipairs(frames) do if f.groupKey then assert(not f.shown) end end
-assert(not sample.ws.shown and not sample.absorb.shown)
-Command("lock"); Command("reset")
-assert(ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled and bar.parent.parent.shown)
-''')
-case("all three feature switches preserve one another", GROUP_SETUP, r'''
+for _, frame in ipairs(frames) do if frame.groupKey then assert(frame:IsVisible() and frame.disabledText.shown) end end
+ClickGroup("shield"); assert(not PriestShieldTrackerEditSettings.controls.enabled:GetChecked())
 Command("settings")
-local p, ct = PriestShieldTrackerOptions, Find("AuraContainer")
-p.groupFrames:SetChecked(false); p.groupFrames.scripts.OnClick(p.groupFrames)
-assert(not GroupContainer(CompactPartyFrameMember2).parent.shown)
-assert(ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled)
-p.readyGroup:SetChecked(false); p.readyGroup.scripts.OnClick(p.readyGroup)
-p.shieldGroup:SetChecked(false); p.shieldGroup.scripts.OnClick(p.shieldGroup)
-p.groupFrames:SetChecked(true); p.groupFrames.scripts.OnClick(p.groupFrames)
-assert(GroupContainer(CompactPartyFrameMember2).parent.shown)
-assert(not ct.slots.weakenedSoul.enabled and not ct.slots.shield.enabled)
+auraRestricted = true; Tick(0.2)
+assert(BlockedWrites() == 0 and PriestShieldTrackerOptions.raidPreview.mine.button:IsVisible())
 ''')
-case("feature switches ignore stale combat clicks and repair invalid saved types", r'''
-PriestShieldTrackerDB = { groupOptions = { weakenedSoul = { enabled = "false" }, shield = { enabled = 0 } } }
-''', r'''
-Command("settings")
-local p, ct = PriestShieldTrackerOptions, Find("AuraContainer")
-assert(p.readyGroup.checked and p.shieldGroup.checked)
+case("minimap left click toggles only this settings page and closes its picker", "", r'''
+local button = PriestShieldTrackerMinimapButton
+button.scripts.OnClick(button, "LeftButton")
+assert(SettingsPanel:IsVisible() and PriestShieldTrackerOptions:IsVisible())
+ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
+function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
+function ColorPickerFrame:GetColorRGB() return 0, 0, 0 end
+PriestShieldTrackerOptions.textColor.scripts.OnClick()
+local stale = ColorPickerFrame.info.swatchFunc
+assert(ColorPickerFrame:IsVisible())
+button.scripts.OnClick(button, "LeftButton")
+assert(not SettingsPanel:IsVisible() and not ColorPickerFrame:IsVisible())
+stale(); assert(PriestShieldTrackerDB.appearance.preset == "Soul")
+button.scripts.OnClick(button, "LeftButton")
+assert(SettingsPanel:IsVisible() and PriestShieldTrackerOptions:IsVisible())
+-- A different settings category must switch to our page rather than close.
+Settings.categories[1].panel:Hide()
+button.scripts.OnClick(button, "LeftButton")
+assert(SettingsPanel:IsVisible() and PriestShieldTrackerOptions:IsVisible())
 combat = true; Fire("PLAYER_REGEN_DISABLED")
-p.readyGroup:SetChecked(false); p.readyGroup.scripts.OnClick(p.readyGroup)
-p.shieldGroup:SetChecked(false); p.shieldGroup.scripts.OnClick(p.shieldGroup)
-assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.enabled and PriestShieldTrackerDB.groupOptions.shield.enabled)
-assert(ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled and BlockedWrites() == 0)
+button.scripts.OnClick(button, "LeftButton")
+assert(not SettingsPanel:IsVisible())
+button.scripts.OnClick(button, "LeftButton")
+assert(not SettingsPanel:IsVisible())
 ''')
-print("72 logic checks passed; live client validation remains required.")
+print(f"{cases_run} logic checks passed; live client validation remains required.")
