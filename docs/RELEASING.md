@@ -20,7 +20,16 @@ For future setup or replacement:
 
 ## Each release
 
-1. Finish local in-game checks and review the change.
+1. Install the upcoming release into the owner's local WoW Forever AddOns folder
+   before publishing. Preserve character SavedVariables and local development
+   files. Verify the installed runtime files against the release package, then
+   finish local in-game checks and review the change. A version label alone is
+   not proof that the installed files are current. This is the owner's standing
+   release preference, confirmed November 16, 2026.
+   After building the package, run `./scripts/install-local.ps1` to install and
+   hash-check every packaged runtime file. It backs up changed files and leaves
+   SavedVariables and development files alone. Do not publish if installation
+   or verification is blocked; report the blocker first.
 2. Update `## Version` in PriestShieldTracker.toc and add the changelog entry.
    Keep the small compatibility importer version in step with the main TOC.
 3. Run `python tests/check.py` and `python scripts/package.py --tag vX.Y.Z`.
