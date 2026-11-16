@@ -11,10 +11,14 @@ SOURCE = (ROOT / "PriestShieldTracker.lua").read_text(encoding="utf-8")
 COMPATIBILITY = (ROOT / "Compatibility.lua").read_text(encoding="utf-8")
 APPEARANCE = (ROOT / "Appearance.lua").read_text(encoding="utf-8")
 OPTIONS = (ROOT / "Options.lua").read_text(encoding="utf-8")
+ACCESS = (ROOT / "Access.lua").read_text(encoding="utf-8")
+GROUP_NATIVE = (ROOT / "GroupAuraNative.lua").read_text(encoding="utf-8")
+GROUP_FRAMES = (ROOT / "GroupFrames.lua").read_text(encoding="utf-8")
 STUBS = r'''
 frames = {}
 messages = {}
 combat = false
+auraRestricted = false
 clock = 100
 absorb = 0
 healthMaximum = 2400
@@ -25,7 +29,8 @@ nativeAvailable = true
 SlashCmdList = {}
 Enum = { SecrecyLevel = { NeverSecret = 0 }, StatusBarTimerDirection = { RemainingTime = 1 },
     StatusBarInterpolation = { ExponentialEaseOut = 1 },
-    LuaCurveType = { Step = 1 }, NumericRuleFormatRounding = { Nearest = 1 } }
+    LuaCurveType = { Step = 1 }, NumericRuleFormatRounding = { Nearest = 1, Up = 2 },
+    DurationTextBindingProperty = { RemainingDuration = 1 } }
 CustomAuraContainerSlotDefaultOptions = {}
 C_AuraContainerUtil = {}
 GameTooltip = { SetOwner = function() end, SetText = function() end, AddLine = function() end,
@@ -68,16 +73,31 @@ end }
 C_Secrets = { GetSpellAuraSecrecy = function() return neverSecret and 0 or 1 end }
 local Frame = {}
 Frame.__index = Frame
+local blockedWrites = 0
 local function RequireWritable(frame)
     local ancestor = frame
     while ancestor do
-        assert(not (combat and ancestor.kind == "Button" and ancestor.restricted),
-            "Attempt to access forbidden object from addon code")
+        if ancestor.kind == "Button" and ancestor.restricted and (combat or auraRestricted) then
+            blockedWrites = blockedWrites + 1
+            error("Attempt to access forbidden object from addon code")
+        end
         ancestor = ancestor.parent
     end
 end
-function Frame:SetHeight(v) self.height = v end
-function Frame:SetWidth(v) self.width = v end
+function BlockedWrites() return blockedWrites end
+function Frame:CanBeAccessedInContext()
+    local ancestor = self
+    while ancestor do
+        if ancestor.accessResult then return ancestor.accessResult end
+        if ancestor.forbidden or (ancestor.kind == "Button" and ancestor.restricted and (combat or auraRestricted)) then return false end
+        ancestor = ancestor.parent
+    end
+    return true
+end
+function Frame:IsForbidden() return self.forbidden == true end
+function Frame:GetName() return self.name end
+function Frame:SetHeight(v) RequireWritable(self); self.height = v end
+function Frame:SetWidth(v) RequireWritable(self); self.width = v end
 function Frame:SetBackdrop(value) self.backdrop = value end
 function Frame:SetBackdropColor(...) end
 function Frame:SetBackdropBorderColor(...) end
@@ -92,7 +112,7 @@ function Frame:SetParent(v)
     self.parent = v
     self.nativeOwned = v and (v.nativeOwned or v.kind == "Button")
 end
-function Frame:SetSize(w,h) self.width = w; self.height = h end
+function Frame:SetSize(w,h) RequireWritable(self); self.width = w; self.height = h end
 function Frame:SetScale(v) self.scale = v end
 function Frame:SetFrameStrata(v) end
 function Frame:SetFrameLevel(v) self.level = v end
@@ -125,11 +145,12 @@ function Frame:RegisterEvent(event) self.events[event] = true end
 function Frame:RegisterUnitEvent(event, unit) self.events[event] = unit end
 function Frame:SetAllPoints(v) self.allPoints = v end
 function Frame:SetClipsChildren(value) self.clipsChildren = value end
+function Frame:SetScrollChild(child) self.scrollChild = child end
 function Frame:SetPoint(...)
-    assert(not self.restricted, "Cannot change an aura button after initialization")
+    RequireWritable(self)
     table.insert(self.points, {...})
 end
-function Frame:ClearAllPoints() self.points = {} end
+function Frame:ClearAllPoints() RequireWritable(self); self.points = {} end
 function Frame:SetStatusBarTexture(v)
     self.texture = self:CreateTexture(nil, "ARTWORK")
 end
@@ -141,7 +162,7 @@ function Frame:SetValue(v, interpolation)
     if self.kind == "Slider" and self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, v) end
 end
 function Frame:SetAlpha(value) RequireWritable(self); self.alpha = value end
-function Frame:SetColorTexture(...) self.color = {...} end
+function Frame:SetColorTexture(...) RequireWritable(self); self.color = {...} end
 function Frame:SetVertexColor(...) self.vertexColor = {...} end
 function Frame:SetBlendMode(value) self.blend = value end
 function Frame:SetTexture(value) self.asset = value end
@@ -157,12 +178,14 @@ function Frame:SetFormattedText(fmt, v)
     if not issecretvalue(v) then self.text = string.format(fmt, v) end
 end
 function Frame:SetShown(v)
+    RequireWritable(self)
     assert(not (self.kind == "AuraContainer" and self.restricted), "Do not toggle a restricted container")
     local wasShown = self.shown
     self.shown = v
     if wasShown and not v and self.scripts.OnHide then self.scripts.OnHide(self) end
     if not wasShown and v and self.scripts.OnShow then self.scripts.OnShow(self) end
 end
+function NativeShown(frame, shown) frame.shown = shown end
 function Frame:Show() self:SetShown(true) end
 function Frame:Hide() self:SetShown(false) end
 function Frame:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
@@ -195,10 +218,16 @@ function Frame:SetDurationBar(v, opts)
     self.durationBar = v
 end
 function Frame:SetDurationText(v, options)
+    RequireWritable(self)
     assert(v.parent == self)
     self.durationText = v; self.durationOptions = options
 end
 function Frame:SetSpellName(v) assert(v.parent == self); self.spellName = v end
+function Frame:SetIcon(v) assert(v.parent == self); self.icon = v end
+function Frame:SetDurationCooldown(v) assert(v.parent == self); self.cooldown = v end
+function Frame:SetDrawEdge(v) self.drawEdge = v end
+function Frame:SetHideCountdownNumbers(v) self.hideCountdownNumbers = v end
+function Frame:SetAuraSlotEnabled(key, enabled) self.slots[key].enabled = enabled end
 function Frame:SetUnit(v) self.unit = v end
 function Frame:SetEnabled(v) self.enabled = v; self.restricted = self.kind == "AuraContainer" end
 function Frame:AddAuraSlot(key, filter, opts)
@@ -216,6 +245,27 @@ function CreateFrame(kind, name, parent, template)
     table.insert(frames, frame)
     if name then _G[name] = frame end
     return frame
+end
+function CreateColor(...) return {...} end
+function C_CurveUtil.CreateColorCurve()
+    return { points = {}, SetType = function(self, v) self.curveType = v end,
+        AddPoint = function(self, x, color) table.insert(self.points, {x, color}) end }
+end
+local oldFormatter = C_StringUtil.CreateNumericRuleFormatter
+function C_StringUtil.CreateNumericRuleFormatter()
+    local formatter = oldFormatter()
+    function formatter:AddBreakpoint(point) self.breakpoints = {point} end
+    return formatter
+end
+function hooksecurefunc(target, method, callback)
+    if type(target) == "string" then
+        local name = target
+        local original, hook = _G[name], method
+        _G[name] = function(...) local result = original(...); hook(...); return result end
+    else
+        local original = target[method]
+        target[method] = function(...) local result = original(...); callback(...); return result end
+    end
 end
 UIParent = CreateFrame("Frame", "UIParent")
 UIParent:SetSize(1920, 1080)
@@ -290,8 +340,11 @@ def new(setup=""):
     lua.execute(STUBS)
     lua.execute(setup)
     namespace = lua.table()
+    lua.execute(ACCESS, "PriestShieldTracker", namespace)
     lua.execute(COMPATIBILITY, "PriestShieldTracker", namespace)
     lua.execute(APPEARANCE, "PriestShieldTracker", namespace)
+    lua.execute(GROUP_NATIVE, "PriestShieldTracker", namespace)
+    lua.execute(GROUP_FRAMES, "PriestShieldTracker", namespace)
     lua.execute(OPTIONS, "PriestShieldTracker", namespace)
     lua.execute(SOURCE, "PriestShieldTracker", namespace)
     lua.execute('''Fire("PLAYER_LOGIN"); hud = PriestShieldTrackerHUD
@@ -404,7 +457,7 @@ assert(not bar.nativeOwned and not bar:IsRendered())
 absorb = 1100; shield:Show(); debuff:Show(); Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(bar:IsRendered() and debuff:IsVisible())
 combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
-shield:Hide(); absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+NativeShown(shield, false); absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(not bar:IsRendered() and debuff:IsVisible())
 combat = false; absorb = 0; Fire("PLAYER_REGEN_ENABLED")
 assert(not bar:IsRendered())
@@ -510,7 +563,7 @@ combat = true; absorb = secret; Fire("PLAYER_REGEN_DISABLED")
 assert(not sample:IsVisible() and ct:IsVisible())
 assert(ws:IsVisible() and timer:IsVisible() and ws.durationText == timer)
 assert(bar:IsRendered() and rawequal(bar.value, secret))
-shield:Hide(); absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+NativeShown(shield, false); absorb = secretZero; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
 assert(not bar:IsRendered() and ws:IsVisible() and timer:IsVisible())
 ''')
 case("login locks old edit state and migrates group positions", '''
@@ -1000,4 +1053,192 @@ assert(SLASH_PRIESTSHIELDTRACKER2 == "/pst" and SLASH_PRIESTSHIELDTRACKER3 == "/
 assert(Settings.categories[1].name == "PriestShieldTracker")
 assert(PriestShieldTrackerHUD and PriestShieldTrackerMinimapButton and SoulShieldHUD == nil)
 ''')
-print("60 logic checks passed; live client validation remains required.")
+case("instance aura restrictions survive combat end without forbidden writes", "", r'''
+local ct = Find("AuraContainer")
+local ws, shield = ct.slots.weakenedSoul.button, ct.slots.shield.button
+local originalWidth = shield.durationBar.width
+auraRestricted = true
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+combat = false; Fire("PLAYER_REGEN_ENABLED")
+Command("width 390"); Command("settings")
+PriestShieldTrackerOptions.palette:Choose("Holy")
+PriestShieldTrackerOptions.showIcon:SetChecked(false)
+PriestShieldTrackerOptions.showIcon.scripts.OnClick(PriestShieldTrackerOptions.showIcon)
+for i = 1, 30 do Tick(0.1) end
+assert(BlockedWrites() == 0 and shield.durationBar.width == originalWidth)
+absorb = secret; Fire("UNIT_ABSORB_AMOUNT_CHANGED")
+assert(rawequal(bar.value, secret) and rawequal(bar.amountText.formattedValue, secret))
+auraRestricted = false
+Tick(1)
+assert(shield.durationBar.width == 390 and shield.durationBar.barColor[1] == 1)
+for _, f in ipairs(frames) do
+    if f.parent == ws and f.asset then assert(not f.shown) end
+end
+assert(Find("AuraContainer") == ct and BlockedWrites() == 0)
+''')
+case("secret object access results defer layout instead of branching on secrets", "", r'''
+local ct = Find("AuraContainer")
+for _, slot in pairs(ct.slots) do slot.button.accessResult = secret end
+local width = ct.slots.shield.button.durationBar.width
+Command("width 410"); Fire("PLAYER_REGEN_ENABLED"); Tick(1)
+assert(ct.slots.shield.button.durationBar.width == width and BlockedWrites() == 0)
+for _, slot in pairs(ct.slots) do slot.button.accessResult = nil end
+Fire("PLAYER_ENTERING_WORLD")
+assert(ct.slots.shield.button.durationBar.width == 410 and BlockedWrites() == 0)
+''')
+
+GROUP_SETUP = r'''
+function CompactUnitFrame_SetUnit(frame, unit) frame.unit = unit end
+function CompactUnitFrame_UpdateAll(frame) end
+CompactPartyFrameMember1 = CreateFrame("Frame", "CompactPartyFrameMember1", UIParent)
+CompactPartyFrameMember1.unit = "player"
+CompactPartyFrameMember2 = CreateFrame("Frame", "CompactPartyFrameMember2", UIParent)
+CompactPartyFrameMember2.unit = "party1"
+CompactRaidGroup2Member3 = CreateFrame("Frame", "CompactRaidGroup2Member3", UIParent)
+CompactRaidGroup2Member3.unit = "raid8"
+PartyFrame = { MemberFrame1 = CreateFrame("Frame", "ClassicPartyMember1", UIParent) }
+PartyFrame.MemberFrame1.unit = "party2"
+function GroupContainer(parent)
+    for _, f in ipairs(frames) do
+        if f.kind == "AuraContainer" and f.parent and f.parent.parent == parent then return f end
+    end
+end
+'''
+case("standalone group icons retain upstream filters borders swipe and green countdown", GROUP_SETUP, r'''
+assert(WeakenedSoulTrackerDB == nil and SlashCmdList.WEAKENEDSOULTRACKER == nil)
+assert(PriestShieldTrackerOptions.parent.scrollChild == PriestShieldTrackerOptions)
+for _, frame in ipairs({CompactPartyFrameMember1, CompactPartyFrameMember2, CompactRaidGroup2Member3, PartyFrame.MemberFrame1}) do
+    local ct = GroupContainer(frame)
+    assert(ct and ct.enabled and ct.unit == frame.unit)
+    local mine, others = ct.slots.mine, ct.slots.others
+    assert(mine.filter == "HARMFUL|PLAYER" and others.filter == "HARMFUL")
+    assert(mine.options.candidateFilters.maxDuration == 15.5)
+    assert(others.options.candidateFilters.isFromPlayerOrPlayerPet == true and not others.enabled)
+    local b = mine.button
+    assert(b.width == 16 and b.height == 16 and b.mouse == false)
+    assert(b.points[1][1] == "TOPRIGHT" and b.points[1][4] == -2)
+    assert(b.icon and b.cooldown and b.cooldown.hideCountdownNumbers and b.cooldown.drawEdge == false)
+    assert(b.durationText and b.durationOptions.textColor.curve.points[2][1] == 3)
+    assert(b.level > others.button.level)
+    local border
+    for _, child in ipairs(frames) do if child.parent == b and child.color then border = child end end
+    assert(border and border.color[1] == 0.9 and border.shown)
+end
+''')
+case("group hooks reassign units reject unrelated frames and never duplicate icons", GROUP_SETUP, r'''
+local frame = CompactPartyFrameMember2
+local ct = GroupContainer(frame)
+CompactUnitFrame_SetUnit(frame, "party3")
+assert(ct.unit == "party3")
+CompactUnitFrame_SetUnit(frame, "target")
+assert(not ct.enabled)
+CompactUnitFrame_SetUnit(frame, "party1")
+assert(ct.enabled and ct.unit == "party1")
+local count = #frames
+for i = 1, 20 do CompactUnitFrame_UpdateAll(frame); Fire("GROUP_ROSTER_UPDATE") end
+assert(#frames == count)
+local enemy = CreateFrame("Frame", "NamePlate1", UIParent); enemy.unit = "party1"
+CompactUnitFrame_UpdateAll(enemy)
+assert(GroupContainer(enemy) == nil)
+frame.unit = secret; Fire("GROUP_ROSTER_UPDATE")
+assert(not ct.enabled and BlockedWrites() == 0)
+''')
+case("group indicator settings defer inside instance and recover when access returns", GROUP_SETUP, r'''
+local ct = GroupContainer(CompactPartyFrameMember2)
+Command("settings")
+auraRestricted = true
+PriestShieldTrackerOptions.groupSize:Choose("24 px")
+PriestShieldTrackerOptions.groupCorner:Choose("Bottom left")
+PriestShieldTrackerOptions.groupTime:Choose("Number (5)")
+PriestShieldTrackerOptions.groupOthers:SetChecked(true)
+PriestShieldTrackerOptions.groupOthers.scripts.OnClick(PriestShieldTrackerOptions.groupOthers)
+Fire("PLAYER_REGEN_ENABLED"); Tick(1)
+assert(ct.slots.mine.button.width == 16 and BlockedWrites() == 0)
+assert(ct.slots.others.enabled and ct.slots.mine.button.mouse == false)
+auraRestricted = false; Tick(1)
+assert(ct.slots.mine.button.width == 24 and ct.slots.mine.button.points[1][1] == "BOTTOMLEFT")
+assert(ct.slots.mine.button.durationOptions.textFormatter.breakpoints[1].format == "%d")
+PriestShieldTrackerOptions.groupFrames:SetChecked(false)
+PriestShieldTrackerOptions.groupFrames.scripts.OnClick(PriestShieldTrackerOptions.groupFrames)
+assert(not ct.parent.shown and BlockedWrites() == 0)
+PriestShieldTrackerOptions.groupFrames:SetChecked(true)
+PriestShieldTrackerOptions.groupFrames.scripts.OnClick(PriestShieldTrackerOptions.groupFrames)
+assert(ct.parent.shown)
+''')
+case("late group frames wait through combat then attach without external addons", GROUP_SETUP, r'''
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+CompactRaidFrame7 = CreateFrame("Frame", "CompactRaidFrame7", UIParent)
+CompactRaidFrame7.unit = "raid7"
+Fire("GROUP_ROSTER_UPDATE")
+assert(GroupContainer(CompactRaidFrame7) == nil)
+combat = false; Fire("PLAYER_REGEN_ENABLED")
+local ct = GroupContainer(CompactRaidFrame7)
+assert(ct and ct.unit == "raid7" and ct.slots.mine.button.durationText and BlockedWrites() == 0)
+''')
+case("exact group aura filtering is retained when Weakened Soul is never secret", GROUP_SETUP + "\nneverSecret = true", r'''
+local ct = GroupContainer(CompactPartyFrameMember2)
+assert(ct.slots.mine.options.candidateFilters.includeSpellIDs[6788])
+assert(ct.slots.others.options.candidateFilters.includeSpellIDs[6788] and ct.slots.others.enabled)
+''')
+case("non-priests never attach group indicators", GROUP_SETUP + '\nclass = "WARRIOR"', r'''
+assert(GroupContainer(CompactPartyFrameMember1) == nil and PriestShieldTrackerDB == nil)
+''')
+case("HUD feature switches are independent and survive preview combat and appearance reset", "", r'''
+Command("settings")
+local p, ct = PriestShieldTrackerOptions, Find("AuraContainer")
+local function Switch(widget, value) widget:SetChecked(value); widget.scripts.OnClick(widget) end
+Switch(p.readyGroup, false)
+assert(not ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled and bar.parent.parent.shown)
+Command("test")
+assert(not sample.ws.shown and not sample.wsTime.shown and not sample.readyIcon.shown and sample.absorb.shown)
+Command("test"); Command("settings")
+Switch(p.shieldGroup, false)
+assert(not ct.slots.shield.enabled and not bar.parent.parent.shown)
+p.resetButton.scripts.OnClick()
+assert(not p.readyGroup.checked and not p.shieldGroup.checked)
+Command("test")
+assert(not sample.absorb.shown and not sample.duration.shown and not sample.label.shown and not sample.time.shown)
+combat = true; Fire("PLAYER_REGEN_DISABLED"); absorb = secret; Tick(0.1)
+assert(not bar.parent.parent.shown and BlockedWrites() == 0)
+combat = false; Fire("PLAYER_REGEN_ENABLED"); Command("settings")
+Switch(p.readyGroup, true)
+assert(ct.slots.weakenedSoul.enabled and not ct.slots.shield.enabled and not bar.parent.parent.shown)
+Switch(p.shieldGroup, true)
+assert(ct.slots.shield.enabled and bar.parent.parent.shown)
+''')
+case("saved disabled HUD groups remain hidden on login and in Edit Mode", r'''
+PriestShieldTrackerDB = { groupOptions = { weakenedSoul = { enabled = false }, shield = { enabled = false } } }
+''', r'''
+local ct = Find("AuraContainer")
+assert(not ct.slots.weakenedSoul.enabled and not ct.slots.shield.enabled and not bar.parent.parent.shown)
+Command("edit")
+for _, f in ipairs(frames) do if f.groupKey then assert(not f.shown) end end
+assert(not sample.ws.shown and not sample.absorb.shown)
+Command("lock"); Command("reset")
+assert(ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled and bar.parent.parent.shown)
+''')
+case("all three feature switches preserve one another", GROUP_SETUP, r'''
+Command("settings")
+local p, ct = PriestShieldTrackerOptions, Find("AuraContainer")
+p.groupFrames:SetChecked(false); p.groupFrames.scripts.OnClick(p.groupFrames)
+assert(not GroupContainer(CompactPartyFrameMember2).parent.shown)
+assert(ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled)
+p.readyGroup:SetChecked(false); p.readyGroup.scripts.OnClick(p.readyGroup)
+p.shieldGroup:SetChecked(false); p.shieldGroup.scripts.OnClick(p.shieldGroup)
+p.groupFrames:SetChecked(true); p.groupFrames.scripts.OnClick(p.groupFrames)
+assert(GroupContainer(CompactPartyFrameMember2).parent.shown)
+assert(not ct.slots.weakenedSoul.enabled and not ct.slots.shield.enabled)
+''')
+case("feature switches ignore stale combat clicks and repair invalid saved types", r'''
+PriestShieldTrackerDB = { groupOptions = { weakenedSoul = { enabled = "false" }, shield = { enabled = 0 } } }
+''', r'''
+Command("settings")
+local p, ct = PriestShieldTrackerOptions, Find("AuraContainer")
+assert(p.readyGroup.checked and p.shieldGroup.checked)
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+p.readyGroup:SetChecked(false); p.readyGroup.scripts.OnClick(p.readyGroup)
+p.shieldGroup:SetChecked(false); p.shieldGroup.scripts.OnClick(p.shieldGroup)
+assert(PriestShieldTrackerDB.groupOptions.weakenedSoul.enabled and PriestShieldTrackerDB.groupOptions.shield.enabled)
+assert(ct.slots.weakenedSoul.enabled and ct.slots.shield.enabled and BlockedWrites() == 0)
+''')
+print("72 logic checks passed; live client validation remains required.")

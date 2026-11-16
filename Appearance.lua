@@ -135,6 +135,7 @@ function A.SetValue(status, value)
 end
 
 function A.StyleBar(status)
+        if not ns.CanAccessRegion(status) then A.pending = true; return end
         local r, g, b = A.Color(status.colorKey)
         local liquid = status.liquid and options.style == "liquid"
         status:SetStatusBarColor(r, g, b, liquid and 0 or 1)
@@ -158,8 +159,12 @@ function A.StyleBar(status)
 end
 
 function A.Apply()
-    -- Native aura-owned text and duration bars may only be styled outside combat.
-    if InCombatLockdown() then return end
-    for _, entry in ipairs(A.texts) do entry.region:SetTextColor(A.Color(entry.key)) end
+    -- Aura access can stay restricted out of combat in instances, too.
+    if InCombatLockdown() then A.pending = true; return end
+    A.pending = false
+    for _, entry in ipairs(A.texts) do
+        if ns.CanAccessRegion(entry.region) then entry.region:SetTextColor(A.Color(entry.key))
+        else A.pending = true end
+    end
     for _, status in ipairs(A.bars) do A.StyleBar(status) end
 end

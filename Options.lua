@@ -3,7 +3,7 @@ local _, ns = ...
 local A = ns.Appearance
 local O = {}
 ns.Options = O
-local db, callbacks, panel, category, picker, pickerSession
+local db, callbacks, panel, canvas, category, picker, pickerSession
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local colorGroups = { bar = { "absorb", "duration" }, text = { "labels", "numbers", "ready", "cross" } }
 local styles = { { "classic", "Classic" }, { "smooth", "Smooth" }, { "liquid", "Liquid" } }
@@ -88,7 +88,19 @@ function O.Refresh()
     panel.barColor.swatch:SetColorTexture(A.Color("absorb"))
     panel.textColor.swatch:SetColorTexture(A.Color("numbers"))
     panel.showIcon:SetChecked(db.groupOptions.weakenedSoul.showIcon)
+    panel.groupFrames:SetChecked(db.groupFrames.enabled)
+    panel.readyGroup:SetChecked(db.groupOptions.weakenedSoul.enabled)
+    panel.shieldGroup:SetChecked(db.groupOptions.shield.enabled)
+    panel.groupOthers:SetChecked(ns.Native.ShowsOthers())
+    panel.groupCorner:SetDefaultText(({ tl = "Top left", tr = "Top right", bl = "Bottom left", br = "Bottom right", c = "Center" })[db.groupFrames.corner])
+    panel.groupSize:SetDefaultText(tostring(db.groupFrames.size) .. " px")
+    panel.groupTime:SetDefaultText(({ seconds = "Seconds (5s)", number = "Number (5)", icon = "Icon only" })[db.groupFrames.timeFormat])
+    panel.groupSoon:SetDefaultText(db.groupFrames.soonReady == 0 and "Off" or tostring(db.groupFrames.soonReady) .. " seconds")
     for _, widget in ipairs(panel.widgets) do widget:SetEnabled(not InCombatLockdown()) end
+    panel.groupOthers:SetEnabled(not InCombatLockdown() and ns.Native.strategy ~= "all")
+    panel.groupFrameNote:SetText(ns.Native.strategy == "all"
+        and "Exact filtering is available: every priest's Weakened Soul is included."
+        or "Other priests use matching debuff properties when exact filtering is restricted.")
     panel.hint:SetText(InCombatLockdown() and "Appearance can be changed after combat."
         or "Changes save automatically for this character.")
 end
@@ -101,8 +113,14 @@ local function EditLayout(toggle)
 end
 
 local function BuildPage()
-    panel = CreateFrame("Frame", "PriestShieldTrackerOptions", UIParent)
-    panel:Hide()
+    canvas = CreateFrame("Frame", nil, UIParent)
+    canvas:Hide()
+    local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 0, -4)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+    panel = CreateFrame("Frame", "PriestShieldTrackerOptions", scroll)
+    panel:SetSize(560, 810)
+    scroll:SetScrollChild(panel)
     panel.widgets = {}
     Label(panel, "PriestShieldTracker", 22, 20, -16)
     Label(panel, "Choose your look here. Move and resize the display in Edit Mode.", 12, 20, -49)
@@ -155,15 +173,46 @@ local function BuildPage()
         db.groupOptions.weakenedSoul.showIcon = self:GetChecked() and true or false
         callbacks.layout(); O.Refresh()
     end)
-    panel.editButton = Button("Edit layout", 20, -375, 190, EditLayout)
-    panel.resetButton = Button("Reset appearance", 230, -375, 190, function()
+    local function Check(caption, x, y, action)
+        local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+        check:SetSize(26, 26); check:SetPoint("TOPLEFT", x, y)
+        Label(check, caption, 12, 30, -6)
+        panel.widgets[#panel.widgets + 1] = check
+        check:SetScript("OnClick", function(self)
+            if not CanChange() then return end
+            action(self:GetChecked() and true or false); ns.GroupFrames.Configure(); callbacks.layout(); O.Refresh()
+        end)
+        return check
+    end
+    Label(panel, "Party and raid frames", 14, 20, -366)
+    panel.groupFrames = Check("Show Weakened Soul icons", 16, -390, function(value) db.groupFrames.enabled = value end)
+    panel.groupOthers = Check("Include other priests", 260, -390, function(value) db.groupFrames.showOthers = value end)
+    panel.groupFrameNote = Label(panel, "", 10, 20, -423)
+    panel.groupCorner = Dropdown("Icon position", -448,
+        { { "tr", "Top right" }, { "tl", "Top left" }, { "br", "Bottom right" }, { "bl", "Bottom left" }, { "c", "Center" } },
+        function() return db.groupFrames.corner end, function(value) db.groupFrames.corner = value; ns.GroupFrames.Configure() end)
+    panel.groupSize = Dropdown("Icon size", -484, { { 12, "12 px" }, { 16, "16 px" }, { 20, "20 px" }, { 24, "24 px" }, { 32, "32 px" } },
+        function() return db.groupFrames.size end, function(value) db.groupFrames.size = value; ns.GroupFrames.Configure() end)
+    panel.groupTime = Dropdown("Countdown", -520, { { "seconds", "Seconds (5s)" }, { "number", "Number (5)" }, { "icon", "Icon only" } },
+        function() return db.groupFrames.timeFormat end, function(value) db.groupFrames.timeFormat = value; ns.GroupFrames.Configure() end)
+    panel.groupSoon = Dropdown("Turn green at", -556, { { 0, "Off" }, { 1, "1 second" }, { 2, "2 seconds" }, { 3, "3 seconds" }, { 5, "5 seconds" } },
+        function() return db.groupFrames.soonReady end, function(value) db.groupFrames.soonReady = value; ns.GroupFrames.Configure() end)
+    Label(panel, "Display features", 14, 20, -602)
+    panel.readyGroup = Check("Shield Ready and Weakened Soul countdown", 16, -628,
+        function(value) db.groupOptions.weakenedSoul.enabled = value end)
+    panel.shieldGroup = Check("Absorb shield and shield expiring bars", 16, -660,
+        function(value) db.groupOptions.shield.enabled = value end)
+    panel.editButton = Button("Edit layout", 20, -718, 190, EditLayout)
+    panel.resetButton = Button("Reset appearance", 230, -718, 190, function()
         O.ClosePicker(); db.appearance.style = "liquid"; A.Preset("Soul")
         db.groupOptions.weakenedSoul.showIcon = true
         callbacks.layout(); O.Refresh()
     end)
-    panel.hint = Label(panel, "", 11, 20, -423)
+    panel.hint = Label(panel, "", 11, 20, -760)
     panel:SetScript("OnShow", O.Refresh)
     panel:SetScript("OnHide", O.ClosePicker)
+    canvas:SetScript("OnShow", O.Refresh)
+    canvas:SetScript("OnHide", O.ClosePicker)
     A.Apply()
 end
 
@@ -230,7 +279,7 @@ function O.Initialize(savedDB, actions)
     db.minimapAngle = db.minimapAngle % 360
     if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
         BuildPage()
-        category = Settings.RegisterCanvasLayoutCategory(panel, "PriestShieldTracker")
+        category = Settings.RegisterCanvasLayoutCategory(canvas, "PriestShieldTracker")
         Settings.RegisterAddOnCategory(category)
         O.Refresh()
     end

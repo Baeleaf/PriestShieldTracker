@@ -11,3 +11,7 @@ trademarks, or other third-party materials.
 The generated liquid textures in Media/ are by Jordan and are distributed under
 the MIT License, reproduced in licenses/SmoothAnimatedBars.txt. Their license
 continues to apply independently of PriestShieldTracker's All Rights Reserved license.
+
+The party/raid aura renderer and frame discovery are adapted from Weakened Soul
+Tracker 2.6.0 by nocktambule under the MIT License, reproduced in
+licenses/WeakenedSoulTracker.txt. That license continues to apply to those portions.

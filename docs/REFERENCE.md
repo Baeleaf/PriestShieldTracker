@@ -64,6 +64,18 @@ The bar learns its full reference from readable absorb increases, normally when 
 
 ## Forever restrictions
 
+Layout and color changes check each native region's current access, rather than relying only on combat lockdown. In dungeons, aura objects can remain locked between pulls. Changes to locked regions wait until the game allows access again; Blizzard continues drawing the live timers. Pending changes retry once per second outside combat and on world transitions.
+
+## Party and raid indicators
+
+PriestShieldTracker includes the icon renderer and frame discovery from Weakened Soul Tracker 2.6.0 by nocktambule (MIT; see `licenses/WeakenedSoulTracker.txt`), adapted for access checks and deferred configuration. No files, saved variables, or running code from that addon are required. Disable WeakenedSoulTracker before testing to avoid duplicate indicators, then restart WoW once to load the new files.
+
+The default is a 16-pixel icon in the top-right corner of Blizzard party and raid frames, with the game-drawn icon, cooldown swipe, remaining seconds, and a red border for your applications. The countdown turns green in the last three seconds. Icons do not intercept targeting or click-casting. Classic party frames, compact party frames, and both grouped and ungrouped compact raid frames are supported. Nameplates, pets, target frames, and third-party unit-frame addons are excluded.
+
+The **Party and raid frames** section in AddOns options controls visibility, corner, size, countdown format, and green countdown threshold. Other priests' applications retain the upstream purple border. With exact spell filtering available, all priests are shown. Otherwise only your own applications are shown by default; **Include other priests** enables property matching for theirs, which can also match some monster debuffs. The personal HUD's existing self-shield filter is unchanged.
+
+## Aura and absorb data
+
 Native AuraContainer slots draw the actual aura timers without Lua inspecting restricted combat aura values. Helpful shield filtering includes the ten Classic Power Word: Shield ranks. Harmful aura identity filters are restricted on friendly units unless the spell is marked NeverSecret. When necessary, the Weakened Soul slot instead selects your own short, non-dispellable, non-boss debuff. This targets solo self-shielding; another priest's Weakened Soul may not be shown under that fallback, and another debuff with identical properties may appear. The custom label reads Shield Ready; the game supplies the countdown.
 
 The absorb StatusBar and FontStrings belong to an ordinary addon-owned frame outside the protected aura subtree. Combat absorb numbers are passed directly to those native widget methods. A transparent 0..1 StatusBar clips the absorb display to its native fill, rendering nothing at zero and the full display for positive whole-point absorption. The addon does not query the fill's size, shown state, or value. No curve evaluation receives a secret number: that API permits secrets only in untainted execution, while StatusBar:SetValue explicitly permits them in addon execution. Restricted values are never compared, formatted in Lua, or saved. The addon does not read the combat log or infer private aura state from UI widgets. The aura buttons remain responsible for drawing their own timers; the absorb refresher never writes to them.
@@ -104,3 +116,7 @@ No code or artwork from the reference addons is bundled.
 ## License
 
 Copyright (c) 2026 Baeleaf. **All Rights Reserved.** Personal installation and use are permitted. See [LICENSE](../LICENSE) for the full notice.
+
+## Feature switches
+
+Open `/pst settings` to independently disable Weakened Soul icons on Blizzard party/raid frames, the Shield Ready/countdown group, or the absorb/expiration bars. All are enabled by default and saved per character. Hidden groups stay hidden in Edit Mode and test previews. Settings can be changed outside combat. Appearance resets preserve feature choices; `/pst reset` restores the HUD groups.

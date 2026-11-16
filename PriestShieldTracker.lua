@@ -9,8 +9,8 @@ local SHIELD_IDS = {
 }
 local defaults = { x = 0, y = -145, width = 260, barHeight = 19, scale = 1, locked = true }
 local groupDefaults = {
-    weakenedSoul = { scale = 1, fontSize = 16, iconSize = 20, showIcon = true },
-    shield = { scale = 1, fontSize = 12 },
+    weakenedSoul = { enabled = true, scale = 1, fontSize = 16, iconSize = 20, showIcon = true },
+    shield = { enabled = true, scale = 1, fontSize = 12 },
 }
 local db, hud, bar, amountText, container, preview, liveRoot, auraRoot
 local maximum, previousAmount, hasReference, previewStarted
@@ -56,6 +56,7 @@ local groups = {
 
 local function PlacePart(region, key, relativeBar, relativeLabel)
     if not region then return end
+    if not ns.CanAccessRegion(region) then pendingLayout = true; return end
     local spec = parts[key]
     local group = (key == "weakenedLabel" or key == "weakenedTime" or key == "weakenedIcon") and "weakenedSoul" or "shield"
     local offset = db.groups[group]
@@ -64,6 +65,7 @@ local function PlacePart(region, key, relativeBar, relativeLabel)
     local x, y = spec.relative and 0 or offset.x, spec.relative and 0 or offset.y
     local relative = spec.relative and (relativeBar or bar) or hud
     if spec.relative == "weakenedLabel" then relative = relativeLabel or nativeParts.weakenedLabel end
+    if not ns.CanAccessRegion(relative) then pendingLayout = true; return end
     region:ClearAllPoints()
     local partX, partY = spec.x, spec.y
     if key == "weakenedLabel" then partX = -(options.showIcon and options.iconSize + 6 or 0) end
@@ -90,13 +92,17 @@ local function LayoutParts()
         for _, entry in ipairs(textRegions) do
             local size = FontSize(entry.size, entry.group, entry.role)
             if entry.applied ~= size then
-                entry.region:SetFont(FONT, size, "OUTLINE")
-                entry.applied = size
+                if ns.CanAccessRegion(entry.region) then
+                    entry.region:SetFont(FONT, size, "OUTLINE")
+                    entry.applied = size
+                else pendingLayout = true end
             end
         end
         local showIcon = db.groupOptions.weakenedSoul.showIcon
-        if nativeParts.weakenedIcon then nativeParts.weakenedIcon:SetShown(showIcon) end
-        if nativeReadyCross then nativeReadyCross:SetShown(showIcon) end
+        for _, region in ipairs({ nativeParts.weakenedIcon, nativeReadyCross }) do
+            if ns.CanAccessRegion(region) then region:SetShown(showIcon)
+            else pendingLayout = true end
+        end
     end
     if preview then
         for key in pairs(parts) do PlacePart(preview.parts[key], key, preview.absorb, preview.ws) end
@@ -115,7 +121,7 @@ local function LayoutParts()
         local width = key == "weakenedSoul" and ReadyWidth() or db.width
         local height = key == "weakenedSoul" and math.max(26 * options.fontSize / 16, options.showIcon and options.iconSize + 6 or 0) or db.barHeight + 28
         handle:SetSize(width * options.scale, height * options.scale)
-        handle:SetShown(not db.locked)
+        handle:SetShown(not db.locked and options.enabled)
     end
 end
 
@@ -253,6 +259,15 @@ local function Layout()
     hud.moveHint:SetShown(not db.locked)
     hud.moveHandle:SetShown(not db.locked)
     LayoutParts()
+    -- Configure native slots through their public API; never hide or inspect
+    -- game-owned aura buttons. The absorb gate is our ordinary wrapper.
+    absorbGate:SetShown(db.groupOptions.shield.enabled)
+    if container then
+        for _, key in ipairs({ "weakenedSoul", "shield" }) do
+            local ok = pcall(container.SetAuraSlotEnabled, container, key, db.groupOptions[key].enabled)
+            if not ok then pendingLayout = true end
+        end
+    end
 end
 
 local function NativeTimer(button, shield)
@@ -336,6 +351,8 @@ local function SetupNativeTimers()
         initializeFrame = function(button) NativeTimer(button, true) end,
     })
     container:SetUnit("player")
+    container:SetAuraSlotEnabled("weakenedSoul", db.groupOptions.weakenedSoul.enabled)
+    container:SetAuraSlotEnabled("shield", db.groupOptions.shield.enabled)
     container:SetEnabled(true)
     LayoutParts()
 end
@@ -420,17 +437,19 @@ local function TickPreview()
     if not previewStarted then return end
     local elapsed = db.locked and (GetTime() - previewStarted) % 18 or 0
     local remaining = math.max(0, 15 - elapsed)
-    preview.ws:SetShown(remaining > 0)
-    preview.wsTime:SetShown(remaining > 0)
-    preview.readyIcon:SetShown(remaining > 0 and db.groupOptions.weakenedSoul.showIcon)
-    preview.readyCross:SetShown(remaining > 0 and db.groupOptions.weakenedSoul.showIcon)
+    local readyEnabled, shieldEnabled = db.groupOptions.weakenedSoul.enabled, db.groupOptions.shield.enabled
+    preview.ws:SetShown(readyEnabled and remaining > 0)
+    preview.wsTime:SetShown(readyEnabled and remaining > 0)
+    preview.readyIcon:SetShown(readyEnabled and remaining > 0 and db.groupOptions.weakenedSoul.showIcon)
+    preview.readyCross:SetShown(readyEnabled and remaining > 0 and db.groupOptions.weakenedSoul.showIcon)
     preview.wsTime:SetFormattedText("%.1f", remaining)
     preview.duration:SetValue(30 - elapsed)
     preview.time:SetFormattedText("%.1f", 30 - elapsed)
     local absorb = math.max(0, 1100 - math.floor(elapsed / 2) * 145)
-    preview.duration:SetShown(absorb > 0)
-    preview.label:SetShown(absorb > 0)
-    preview.time:SetShown(absorb > 0)
+    preview.absorb:SetShown(shieldEnabled)
+    preview.duration:SetShown(shieldEnabled and absorb > 0)
+    preview.label:SetShown(shieldEnabled and absorb > 0)
+    preview.time:SetShown(shieldEnabled and absorb > 0)
     preview.absorb:SetMinMaxValues(0, 1100)
     Appearance.SetValue(preview.absorb, absorb)
     preview.absorbAmount:SetFormattedText("%.0f", absorb)
@@ -699,6 +718,7 @@ local function Initialize()
     auraRoot = CreateFrame("Frame", nil, liveRoot)
     auraRoot:SetAllPoints(hud)
     absorbGate = CreateFrame("StatusBar", nil, liveRoot)
+    absorbGate:SetShown(db.groupOptions.shield.enabled)
     absorbGate:SetStatusBarTexture(WHITE)
     absorbGate:SetStatusBarColor(1, 1, 1, 0)
     absorbGate:SetMinMaxValues(0, 1)
@@ -735,6 +755,7 @@ local function Initialize()
     Appearance.Apply()
     UpdateAbsorb()
     SetupEditMode()
+    ns.GroupFrames.Initialize(db)
     ns.Options.Initialize(db, {
         print = Print,
         prepare = function() CloseEditMode() end,
@@ -763,13 +784,21 @@ events:RegisterUnitEvent("UNIT_MAXHEALTH", "player")
 -- Absorb events can be absent or arrive before the unit cache has settled.
 -- Refresh from the unit API independently of previews and native aura state.
 -- Restricted values still go directly to native widgets, never Lua arithmetic.
-local refreshElapsed = 0
+local refreshElapsed, layoutRetryElapsed = 0, 0
 events:SetScript("OnUpdate", function(_, elapsed)
     if not initialized then return end
     refreshElapsed = refreshElapsed + elapsed
+    layoutRetryElapsed = layoutRetryElapsed + elapsed
     if refreshElapsed < 0.1 then return end
     refreshElapsed = 0
     UpdateAbsorb()
+    if layoutRetryElapsed >= 1 then
+        layoutRetryElapsed = 0
+        if not InCombatLockdown() then
+            if pendingLayout then Layout() end
+            if Appearance.pending then Appearance.Apply() end
+        end
+    end
 end)
 events:SetScript("OnEvent", function(_, event, argument)
     if event == "PLAYER_LOGIN" then Initialize(); return end
@@ -796,7 +825,7 @@ events:SetScript("OnEvent", function(_, event, argument)
         hud.moveHint:Hide()
         hud.moveHandle:Hide()
         for _, handle in pairs(handles) do handle:SetScript("OnUpdate", nil); handle:Hide() end
-    elseif event == "PLAYER_REGEN_ENABLED" then
+    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_ENTERING_WORLD" then
         Layout()
         Appearance.Apply(); ns.Options.Refresh()
         if not db.locked then StartPreview() end

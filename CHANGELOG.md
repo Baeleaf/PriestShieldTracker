@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 - November 16, 2026
+
+- Fix forbidden-object errors after dungeon combat by deferring layout and color changes while Blizzard's aura objects remain locked.
+- Add Weakened Soul icons to Blizzard party and raid frames, with countdowns, cooldown swipes, and colored borders.
+- Reuse the indicator implementation from Weakened Soul Tracker, with its MIT license included; that addon is no longer needed.
+- Choose icon size, corner, countdown format, and the green countdown threshold in PriestShieldTracker's settings.
+- Independently enable or disable party/raid icons, Shield Ready, and the absorb/expiration bars in settings.
+- Add a live gameplay GIF showing the party-frame indicators, with names covered and the cursor cropped out.
+
 ## 0.3.1 - November 15, 2026
 
 - Renamed the addon to PriestShieldTracker.

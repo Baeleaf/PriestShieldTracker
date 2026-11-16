@@ -15,6 +15,13 @@ PriestShieldTracker helps priests in **WoW Forever** see how much protection rem
 - **Shield timer:** See how much time is left on Power Word: Shield, even if Weakened Soul is still counting down.
 - **Make it fit your UI:** Move the bars and countdown separately, and adjust text, icon, and bar sizes.
 - **Saved layouts:** Keep your settings for each character across logins and reloads.
+- **Party and raid indicators:** Small Weakened Soul icons on Blizzard's group frames show a cooldown swipe and countdown. WeakenedSoulTracker is not required.
+
+## Live Party-Frame Tracking
+
+![Weakened Soul icons and countdowns on party frames during live gameplay](https://raw.githubusercontent.com/Baeleaf/PriestShieldTracker/main/docs/images/priestshieldtracker-party-frames.gif)
+
+*Recorded in WoW Forever at normal speed. Cropped to the party frames; character names covered and cursor excluded.*
 
 ## Make It Your Own
 
@@ -34,6 +41,16 @@ Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **O
 
 *Edited preview with sample values. Shows selected styles and palettes at normal speed, with menu interactions removed.*
 
+## Feature Switches
+
+In **Options > AddOns > PriestShieldTracker** (`/pst settings`), independently turn on or off:
+
+- Weakened Soul icons on party and raid frames.
+- The Shield Ready and Weakened Soul countdown group.
+- The absorb shield and shield expiring bars group.
+
+All three are enabled by default and saved for each character. Disabled HUD groups also stay hidden in Edit Mode and test previews. Change these settings outside combat.
+
 ## Usage
 
 Cast **Power Word: Shield** on yourself to see the display. Shield yourself outside combat first so the bar learns what a full shield looks like. The display hides when there is nothing to track.
@@ -44,7 +61,7 @@ Cast **Power Word: Shield** on yourself to see the display. Shield yourself outs
 
 ## Installation
 
-Version **0.3.1** supports **WoW Forever 1.60.1**.
+Version **0.3.2** supports **WoW Forever 1.60.1**.
 
 1. Install PriestShieldTracker through the CurseForge app, or download the ZIP from this page.
 2. Extract both included folders into `World of Warcraft/_forever_/Interface/AddOns/`. The small settings importer preserves your previous layout.
@@ -52,7 +69,7 @@ Version **0.3.1** supports **WoW Forever 1.60.1**.
 
 ## Good to Know
 
-PriestShieldTracker tracks your own character. The protection number includes all active shields. **Shield Ready** follows Weakened Soul; you still need enough mana to cast. See the [tracking notes](https://github.com/Baeleaf/PriestShieldTracker/blob/main/docs/REFERENCE.md#forever-restrictions) for limitations when another priest shields you.
+The main display tracks your own character; the small indicators track players on Blizzard's party and raid frames. The protection number includes all active shields. **Shield Ready** follows Weakened Soul; you still need enough mana to cast. See the [tracking notes](https://github.com/Baeleaf/PriestShieldTracker/blob/main/docs/REFERENCE.md#forever-restrictions) for limitations when another priest shields you.
 
 ## Feedback
 
