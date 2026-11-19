@@ -78,6 +78,24 @@ The **Party and raid frames** section in AddOns options controls visibility, cor
 
 Hover over settings and Edit Mode controls for explanations. AddOns options includes sample party/raid frames with animated Weakened Soul icons and timers. The samples follow the icon visibility, other-priest option, corner, size, countdown format, and green threshold immediately; the other-priest sample icon is hidden while that option is off. These are fictional players and timers, independent of real group activity.
 
+## Shadow Word: Death indicator
+
+The **Shadow Word: Death > Enabled** checkbox in AddOns settings controls glows
+on matching action buttons and Essential/Utility cooldown manager icons. The
+highest learned rank supplies the minimum damage estimate. The indicator ignores
+resistances, absorbs, and damage reduction. It stays visible through the GCD;
+the spell's own cooldown, mana, range, and valid-target requirements still apply.
+There is no separate popup or Edit Mode element for this indicator.
+
+`/pst glowtest` previews the matching icons for five seconds outside combat.
+`/pst execute` reports the learned rank, threshold, and icon counts.
+`/pst glowdebug` prints recent public diagnostic transitions after a problem.
+
+The addon uses your game client's language, with English fallback. Random palette
+mode chooses a different named palette on login/reload and every 15–30 minutes,
+waiting through combat, Edit Mode, and color picking. The installed version stays
+visible at the bottom of settings.
+
 ## Aura and absorb data
 
 Native AuraContainer slots draw the actual aura timers without Lua inspecting restricted combat aura values. Helpful shield filtering includes the ten Classic Power Word: Shield ranks. Harmful aura identity filters are restricted on friendly units unless the spell is marked NeverSecret. When necessary, the Weakened Soul slot instead selects your own short, non-dispellable, non-boss debuff. This targets solo self-shielding; another priest's Weakened Soul may not be shown under that fallback, and another debuff with identical properties may appear. The custom label reads Shield Ready; the game supplies the countdown.

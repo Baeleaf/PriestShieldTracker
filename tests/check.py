@@ -4,9 +4,11 @@ This verifies addon logic, not the game's rendering or secret execution engine.
 Run with Python and lupa installed: python tests/check.py
 """
 from pathlib import Path
+import json
 from lupa.lua51 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
+LOCALIZATION = (ROOT / "Localization.lua").read_text(encoding="utf-8")
 SOURCE = (ROOT / "PriestShieldTracker.lua").read_text(encoding="utf-8")
 COMPATIBILITY = (ROOT / "Compatibility.lua").read_text(encoding="utf-8")
 APPEARANCE = (ROOT / "Appearance.lua").read_text(encoding="utf-8")
@@ -14,6 +16,8 @@ OPTIONS = (ROOT / "Options.lua").read_text(encoding="utf-8")
 ACCESS = (ROOT / "Access.lua").read_text(encoding="utf-8")
 GROUP_NATIVE = (ROOT / "GroupAuraNative.lua").read_text(encoding="utf-8")
 GROUP_FRAMES = (ROOT / "GroupFrames.lua").read_text(encoding="utf-8")
+EXECUTE = (ROOT / "Execute.lua").read_text(encoding="utf-8")
+ACTION_GLOW = (ROOT / "ActionGlow.lua").read_text(encoding="utf-8")
 STUBS = r'''
 frames = {}
 messages = {}
@@ -28,7 +32,7 @@ neverSecret = false
 nativeAvailable = true
 SlashCmdList = {}
 Enum = { SecrecyLevel = { NeverSecret = 0 }, StatusBarTimerDirection = { RemainingTime = 1 },
-    StatusBarInterpolation = { ExponentialEaseOut = 1 },
+    StatusBarInterpolation = { Immediate = 0, ExponentialEaseOut = 1 },
     LuaCurveType = { Step = 1 }, NumericRuleFormatRounding = { Nearest = 1, Up = 2 },
     DurationTextBindingProperty = { RemainingDuration = 1 } }
 CustomAuraContainerSlotDefaultOptions = {}
@@ -79,6 +83,10 @@ local blockedWrites = 0
 local function RequireWritable(frame)
     local ancestor = frame
     while ancestor do
+        if ancestor.secureAction and combat then
+            blockedWrites = blockedWrites + 1
+            error("Cannot modify a secure action button during combat")
+        end
         if ancestor.kind == "Button" and ancestor.restricted and (combat or auraRestricted) then
             blockedWrites = blockedWrites + 1
             error("Attempt to access forbidden object from addon code")
@@ -151,7 +159,10 @@ function Frame:HookScript(event, fn)
 end
 function Frame:SetHitRectInsets(...) self.hitRectInsets = {...} end
 function Frame:GetScript(event) return self.scripts[event] end
-function Frame:RegisterEvent(event) self.events[event] = true end
+function Frame:RegisterEvent(event)
+    assert(event ~= "LEARNED_SPELL_IN_TAB", 'Attempt to register unknown event "LEARNED_SPELL_IN_TAB"')
+    self.events[event] = true
+end
 function Frame:RegisterUnitEvent(event, unit) self.events[event] = unit end
 function Frame:SetAllPoints(v) self.allPoints = v end
 function Frame:SetClipsChildren(value) self.clipsChildren = value end
@@ -213,6 +224,22 @@ function Frame:IsRendered()
         local nativeValue = issecretvalue(value) and (rawget(value, "nativeValue") or 1) or value
         clipVisible = nativeValue ~= nil and nativeValue > 0
     end
+    -- C-side rectangle intersection for a fixed clip following a fill edge.
+    -- These coordinates/health values are never exposed back to addon code.
+    if self.clipsChildren and #self.points == 1 then
+        local anchor = self.points[1]
+        local fill = anchor[2]
+        if fill and fill.kind == "Texture" and fill.parent.kind == "StatusBar"
+            and anchor[3] == "TOPRIGHT" and self.width then
+            local meter = fill.parent
+            local value = meter.value
+            local nativeValue = issecretvalue(value) and (rawget(value, "nativeValue") or 1) or value
+            local proportion = math.max(0, math.min(1, (nativeValue - meter.minimum) / (meter.maximum - meter.minimum)))
+            local left = proportion * meter.width
+            if anchor[1] == "TOPRIGHT" then left = left - self.width end
+            clipVisible = left < meter.width and left + self.width > 0
+        end
+    end
     return alphaVisible and clipVisible and self.shown and (not self.parent or self.parent:IsRendered())
 end
 function Frame:StartMoving() self.moving = true end
@@ -221,6 +248,7 @@ function Frame:GetWidth() return self.width end
 function Frame:GetHeight() return self.height end
 function Frame:GetCenter() return 1200, 700 end
 function Frame:GetEffectiveScale() return self.scale or 1 end
+function Frame:GetEffectiveAlpha() if self.alpha == nil then return 1 else return self.alpha end end
 function Frame:CreateTexture() return CreateFrame("Texture", nil, self) end
 function Frame:CreateFontString() return CreateFrame("FontString", nil, self) end
 function Frame:SetDurationBar(v, opts)
@@ -255,12 +283,23 @@ function CreateFrame(kind, name, parent, template)
         template = template, scripts = {}, events = {}, points = {}, slots = {}, shown = true }, Frame)
     table.insert(frames, frame)
     if name then _G[name] = frame end
+    if template == "ActionButtonSpellAlertTemplate" then
+        frame.shown = false
+        frame.ProcLoop = { plays = 0, Play = function(self) self.plays = self.plays + 1 end,
+            Stop = function(self) self.stopped = true end }
+    end
     return frame
 end
 function CreateColor(...) return {...} end
 function C_CurveUtil.CreateColorCurve()
     return { points = {}, SetType = function(self, v) self.curveType = v end,
         AddPoint = function(self, x, color) table.insert(self.points, {x, color}) end }
+end
+function C_CurveUtil.EvaluateColorValueFromBoolean(value, yes, no)
+    if issecretvalue(value) then
+        return setmetatable({ secret = true, rendered = rawget(value, "nativeValue") == true }, getmetatable(secret))
+    end
+    return value and yes or no
 end
 local oldFormatter = C_StringUtil.CreateNumericRuleFormatter
 function C_StringUtil.CreateNumericRuleFormatter()
@@ -295,9 +334,9 @@ function Settings.RegisterAddOnCategory(category) table.insert(Settings.categori
 function Settings.OpenToCategory(id)
     Settings.opened = id; SettingsPanel:Show(); Settings.categories[id].panel:Show()
 end
-function Fire(event, argument)
+function Fire(event, argument, ...)
     for _, f in ipairs(frames) do
-        if f.events[event] and f.scripts.OnEvent then f.scripts.OnEvent(f, event, argument or "player") end
+        if f.events[event] and f.scripts.OnEvent then f.scripts.OnEvent(f, event, argument or "player", ...) end
     end
 end
 function Find(kind, parent)
@@ -351,12 +390,19 @@ def new(setup=""):
     lua.execute(STUBS)
     lua.execute(setup)
     namespace = lua.table()
+    lua.execute(LOCALIZATION, "PriestShieldTracker", namespace)
+    lua.globals().localeText = namespace.L
+    lua.globals().localization = namespace.Localization
     lua.execute(ACCESS, "PriestShieldTracker", namespace)
     lua.execute(COMPATIBILITY, "PriestShieldTracker", namespace)
     lua.execute(APPEARANCE, "PriestShieldTracker", namespace)
     lua.execute(GROUP_NATIVE, "PriestShieldTracker", namespace)
     lua.execute(GROUP_FRAMES, "PriestShieldTracker", namespace)
     lua.execute(OPTIONS, "PriestShieldTracker", namespace)
+    lua.execute(ACTION_GLOW, "PriestShieldTracker", namespace)
+    lua.globals().actionGlowModule = namespace.ActionGlow
+    lua.execute(EXECUTE, "PriestShieldTracker", namespace)
+    lua.globals().executeModule = namespace.Execute
     lua.execute(SOURCE, "PriestShieldTracker", namespace)
     lua.execute('''Fire("PLAYER_LOGIN"); hud = PriestShieldTrackerHUD
 for _, f in ipairs(frames) do
@@ -480,13 +526,13 @@ assert(not bar:IsRendered())
 Command("test"); assert(sample.absorb:IsVisible() and not bar.nativeOwned and not bar:IsRendered())
 Command("test"); assert(not bar.nativeOwned and not bar:IsRendered())
 ''')
-case("two draggable groups preserve spacing and native ownership", "", r'''
+case("two draggable shield groups preserve spacing and native ownership", "", r'''
 Command("scale 1.5"); Command("unlock")
 local handle, debuffHandle, count = nil, nil, 0
 for _, f in ipairs(frames) do
     if f.groupKey then
         count = count + 1
-        if f.groupKey == "shield" then handle = f else debuffHandle = f end
+        if f.groupKey == "shield" then handle = f elseif f.groupKey == "weakenedSoul" then debuffHandle = f end
     end
 end
 assert(count == 2 and handle.shown and sample:IsVisible())
@@ -669,7 +715,9 @@ absorb = secretZero; Tick(0.1); assert(not bar:IsRendered())
 ''')
 case("reload with secret zero absorbs uses native clipping without curve evaluation", "absorb = secretZero", r'''
 local clip, gate = bar.parent, bar.parent.parent
-assert(clip.clipsChildren and clip.allPoints == gate:GetStatusBarTexture())
+assert(clip.clipsChildren and clip.allPoints == nil)
+assert(clip.points[1][1] == "TOPRIGHT" and clip.points[1][2] == gate:GetStatusBarTexture())
+assert(clip.width == gate.width and clip.height == gate.height)
 assert(gate.minimum == 0 and gate.maximum == 1)
 assert(gate.points[1][4] == bar.points[1][4] and gate.points[1][5] == bar.points[1][5])
 for i = 1, 600 do Tick(0.1) end
@@ -678,7 +726,7 @@ absorb = secret; Tick(0.1)
 assert(bar:IsRendered() and rawequal(bar.value, secret) and rawequal(gate.value, secret))
 absorb = secretZero; Tick(0.1); assert(not bar:IsRendered())
 Command("width 320")
-assert(gate.width == 320 and bar.width == 320)
+assert(gate.width == 320 and bar.width == 320 and clip.width == 320)
 ''')
 case("native Edit Mode opens settings and closing it clears previews", "EnableNativeEditMode()", r'''
 ShowUIPanel(EditModeManagerFrame)
@@ -1043,9 +1091,9 @@ assert(not PriestShieldTrackerDB.locked and PriestShieldTrackerEditSettings.subt
 button.scripts.OnClick(button, "RightButton")
 assert(PriestShieldTrackerDB.locked)
 ''')
-case("palette dropdown contains six working presets without a Custom option", "", r'''
+case("palette dropdown contains six named palettes and Random without a Custom option", "", r'''
 Command("settings"); PriestShieldTrackerOptions.palette:GenerateMenu()
-assert(#PriestShieldTrackerOptions.palette.choices == 6)
+assert(#PriestShieldTrackerOptions.palette.choices == 7)
 for _, choice in ipairs(PriestShieldTrackerOptions.palette.choices) do assert(choice.text ~= "Custom") end
 PriestShieldTrackerOptions.palette:Choose("Holy")
 assert(PriestShieldTrackerDB.appearance.preset == "Holy")
@@ -1299,7 +1347,9 @@ case("saved disabled groups remain configurable and preview safe under aura lock
 PriestShieldTrackerDB = { groupOptions = { weakenedSoul = { enabled = false }, shield = { enabled = false } } }
 ''', r'''
 Command("edit")
-for _, frame in ipairs(frames) do if frame.groupKey then assert(frame:IsVisible() and frame.disabledText.shown) end end
+for _, frame in ipairs(frames) do
+    if frame.groupKey then assert(frame:IsVisible() and frame.disabledText.shown) end
+end
 ClickGroup("shield"); assert(not PriestShieldTrackerEditSettings.controls.enabled:GetChecked())
 Command("settings")
 auraRestricted = true; Tick(0.2)
@@ -1330,4 +1380,830 @@ assert(not SettingsPanel:IsVisible())
 button.scripts.OnClick(button, "LeftButton")
 assert(not SettingsPanel:IsVisible())
 ''')
+RANDOM_SETUP = r'''
+randomInterval = 900
+math.random = function(low, high)
+    if low == 900 and high == 1800 then return randomInterval end
+    return low
+end
+'''
+case("Random rotates at 15 and 30 minute boundaries and never repeats immediately", RANDOM_SETUP, r'''
+Command("settings"); PriestShieldTrackerOptions.palette:Choose("Random")
+local appearance = PriestShieldTrackerDB.appearance
+local first = appearance.activePreset
+assert(appearance.preset == "Random" and first ~= "Soul")
+Tick(899); assert(appearance.activePreset == first)
+randomInterval = 1800
+Tick(1)
+local second = appearance.activePreset
+assert(second ~= first and appearance.preset == "Random")
+Tick(1799); assert(appearance.activePreset == second)
+Tick(1); assert(appearance.activePreset ~= second)
+local selected = false
+for _, choice in ipairs(PriestShieldTrackerOptions.palette.choices) do
+    if choice.text == "Random" then selected = choice.selected() end
+end
+assert(selected)
+''')
+case("Random waits through combat then updates accessible displays while aura timers stay locked", RANDOM_SETUP, r'''
+Command("settings"); PriestShieldTrackerOptions.palette:Choose("Random")
+local appearance = PriestShieldTrackerDB.appearance
+local first = appearance.activePreset
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+clock = clock + 2000; Tick(1)
+assert(appearance.activePreset == first)
+local shield = Find("AuraContainer").slots.shield.button
+local oldTimerRed = shield.durationBar.barColor[1]
+auraRestricted = true; combat = false; Fire("PLAYER_REGEN_ENABLED"); Tick(1)
+assert(appearance.activePreset ~= first and BlockedWrites() == 0)
+assert(bar.liquid.rows[1].body.vertexColor[1] == appearance.colors.absorb[1])
+assert(sample.ws.textColor[2] == appearance.colors.ready[2])
+assert(shield.durationBar.barColor[1] == oldTimerRed)
+local current = appearance.activePreset
+clock = clock + 899; Tick(1)
+assert(appearance.activePreset ~= current and BlockedWrites() == 0)
+assert(bar.liquid.rows[1].body.vertexColor[1] == appearance.colors.absorb[1])
+current = appearance.activePreset
+auraRestricted = false; Tick(1)
+assert(appearance.activePreset == current and BlockedWrites() == 0)
+assert(shield.durationBar.barColor[1] == appearance.colors.duration[1])
+Tick(1); assert(appearance.activePreset == current)
+''')
+case("Random waits during Edit Mode and color picking and respects manual choices", RANDOM_SETUP, r'''
+Command("settings"); PriestShieldTrackerOptions.palette:Choose("Random")
+local appearance = PriestShieldTrackerDB.appearance
+local first = appearance.activePreset
+Command("edit"); clock = clock + 900; Tick(1)
+assert(appearance.activePreset == first)
+Command("lock"); Tick(1)
+assert(appearance.activePreset ~= first)
+Command("settings")
+ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame", UIParent)
+function ColorPickerFrame:SetupColorPickerAndShow(info) self.info = info; self:Show() end
+function ColorPickerFrame:GetColorRGB() return 0.2, 0.3, 0.4 end
+PriestShieldTrackerOptions.textColor.scripts.OnClick()
+first = appearance.activePreset; clock = clock + 900; Tick(1)
+assert(appearance.activePreset == first)
+ColorPickerFrame.info.cancelFunc(); Tick(1)
+assert(appearance.activePreset ~= first and appearance.preset == "Random")
+PriestShieldTrackerOptions.palette:Choose("Emerald")
+clock = clock + 4000; Tick(1)
+assert(appearance.preset == "Emerald" and appearance.activePreset == "Emerald")
+PriestShieldTrackerOptions.palette:Choose("Random")
+PriestShieldTrackerOptions.textColor.scripts.OnClick()
+ColorPickerFrame.info.swatchFunc()
+clock = clock + 4000; Tick(1)
+assert(appearance.preset == "Custom" and appearance.colors.numbers[1] == 0.2)
+ColorPickerFrame.info.cancelFunc(); ColorPickerFrame:Hide(); Tick(1)
+assert(appearance.preset == "Random" and appearance.colors.numbers[1] == 1)
+''')
+case("Random chooses another palette on reload and preserves unrelated settings", RANDOM_SETUP + r'''
+PriestShieldTrackerDB = { width = 350, appearance = { preset = "Random", activePreset = "Holy", style = "smooth" },
+    groupOptions = { weakenedSoul = { enabled = false, showIcon = false } }, groups = { shield = { x = 42, y = 8 } } }
+''', r'''
+local appearance = PriestShieldTrackerDB.appearance
+assert(appearance.preset == "Random" and appearance.activePreset ~= "Holy")
+assert(appearance.style == "smooth" and bar.width == 350)
+assert(not PriestShieldTrackerDB.groupOptions.weakenedSoul.enabled and not PriestShieldTrackerDB.groupOptions.weakenedSoul.showIcon)
+assert(PriestShieldTrackerDB.groups.shield.x == 42 and PriestShieldTrackerDB.locked)
+Command("settings"); assert(PriestShieldTrackerOptions.palette.choices[7].selected())
+''')
+case("Random reload in combat builds widgets with the new palette safely", RANDOM_SETUP + r'''
+combat = true; absorb = secret
+PriestShieldTrackerDB = { appearance = { preset = "Random", activePreset = "Holy" } }
+''', r'''
+assert(PriestShieldTrackerDB.appearance.activePreset ~= "Holy" and BlockedWrites() == 0)
+assert(rawequal(bar.value, secret) and not sample:IsVisible())
+''')
+
+
+def saved_lua(value):
+    if value is None:
+        return "nil"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return "{" + ",".join(f"[{saved_lua(k)}]={saved_lua(v)}" for k, v in value.items()) + "}"
+
+
+reload_client = new(RANDOM_SETUP)
+reload_client.execute('Command("settings"); PriestShieldTrackerOptions.palette:Choose("Random")')
+for _ in range(6):
+    previous_palette = reload_client.globals().PriestShieldTrackerDB.appearance.activePreset
+    previous_color = tuple(reload_client.globals().PriestShieldTrackerDB.appearance.colors.absorb.values())
+    saved_settings = saved_lua(reload_client.globals().PriestShieldTrackerDB)
+    reload_client = new(RANDOM_SETUP + "PriestShieldTrackerDB = " + saved_settings)
+    assert reload_client.globals().PriestShieldTrackerDB.appearance.activePreset != previous_palette
+    assert tuple(reload_client.globals().PriestShieldTrackerDB.appearance.colors.absorb.values()) != previous_color
+    reload_client.execute(r'''
+local appearance = PriestShieldTrackerDB.appearance
+for i = 1, 3 do
+    assert(bar.liquid.rows[1].body.vertexColor[i] == appearance.colors.absorb[i])
+    assert(sample.absorb.liquid.rows[1].body.vertexColor[i] == appearance.colors.absorb[i])
+    assert(sample.ws.textColor[i] == appearance.colors.ready[i])
+    assert(Find("AuraContainer").slots.shield.button.durationBar.barColor[i] == appearance.colors.duration[i])
+end
+Command("settings"); assert(PriestShieldTrackerOptions.palette.choices[7].selected())
+local beforeTimer = appearance.activePreset
+Tick(900); assert(appearance.activePreset ~= beforeTimer)
+assert(bar.liquid.rows[1].body.vertexColor[1] == appearance.colors.absorb[1])
+''')
+cases_run += 1
+print("PASS Random reloads restore saved settings and change actual live preview and timer colors")
+
+for client_locale in ('enUS', 'enGB', 'deDE', 'frFR', 'esES', 'esMX', 'ptBR', 'itIT', 'ruRU', 'koKR', 'zhCN', 'zhTW', 'unsupported'):
+    case(f"localized UI and saved setting keys remain functional for {client_locale}",
+         f'function GetLocale() return "{client_locale}" end', r'''
+Command("settings")
+local panel = PriestShieldTrackerOptions
+if localization.dictionaries[localization.sourceLocale] then
+    assert(panel.translationNote:IsVisible())
+    assert(panel.translationNote.text == localeText["Wording mistakes? Report them via a GitHub issue or CurseForge comment."])
+    assert(panel.translationNote.text ~= "Wording mistakes? Report them via a GitHub issue or CurseForge comment.")
+    assert(panel.translationNote.parent == panel.version.parent and panel.translationNote.points[1][5] > panel.version.points[1][5])
+else
+    assert(panel.translationNote == nil)
+end
+assert(bar.absorbLabel.text == localeText["Absorb"])
+assert(sample.ws.text == localeText["Shield Ready"])
+assert(panel.groupCorner.defaultText == localeText["Top right"])
+panel.palette:Choose(localeText["Holy"])
+panel.style:Choose(localeText["Smooth"])
+assert(PriestShieldTrackerDB.appearance.preset == "Holy" and PriestShieldTrackerDB.appearance.style == "smooth")
+panel.groupTime:Choose(localeText["Number (5)"])
+panel.groupSoon:Choose(localeText["1 second"])
+assert(PriestShieldTrackerDB.groupFrames.timeFormat == "number" and PriestShieldTrackerDB.groupFrames.soonReady == 1)
+assert(panel.groupSoon.defaultText == string.format(localeText["%d second"], 1))
+panel.groupTime:Choose(localeText["Seconds (5s)"])
+assert(panel.raidPreview.mine.text.text == string.format(localeText["%ds"], 15))
+for _, widget in ipairs(panel.widgets) do
+    widget.scripts.OnEnter(widget)
+    assert(GameTooltip.shown and #GameTooltip.description > 0)
+    widget.scripts.OnLeave(widget)
+end
+panel.editButton.scripts.OnClick()
+assert(PriestShieldTrackerEditSettings.subtitle.text == localeText["Shield Ready"])
+ClickGroup("shield")
+assert(PriestShieldTrackerEditSettings.subtitle.text == localeText["Absorb display"])
+local shield = Find("AuraContainer").slots.shield.button
+assert(FindText(shield, localeText["Shield expires in"]))
+Command("lock"); Command("width nope")
+assert(messages[#messages]:find(string.format(localeText["%s must be between %s and %s."], "width", 180, 500), 1, true))
+assert(localeText["A future untranslated string"] == "A future untranslated string")
+''')
+
+case("translations cover matching keys and preserve format arguments and UTF-8", 'function GetLocale() return "frFR" end', r'''
+local base = localization.dictionaries.frFR
+local function Tokens(text)
+    local result = {}
+    for token in text:gmatch("%%[ds]") do result[#result + 1] = token end
+    return table.concat(result, ",")
+end
+local count = 0
+for locale, dictionary in pairs(localization.dictionaries) do
+    count = count + 1
+    local keys = 0
+    for key, value in pairs(dictionary) do
+        keys = keys + 1
+        assert(base[key] and type(value) == "string" and #value > 0)
+        assert(Tokens(key) == Tokens(value), locale .. ": " .. key)
+        if value:find("??", 1, true) then error("Possible text encoding damage in translation: " .. locale .. ": " .. key) end
+    end
+    assert(keys == 122)
+end
+assert(count == 9)
+assert(localization.dictionaries.zhCN["Save"] ~= "Save")
+assert(localization.dictionaries.zhTW["Save"] ~= localization.dictionaries.zhCN["Save"])
+assert(localeText["Top right"] ~= "Top right")
+''')
+EXECUTE_SETUP = r'''
+Enum.SpellBookSpellBank = { Player = 0 }
+known = { [90001] = true }
+spellName = "Shadow Word: Death"
+damageText = {
+    [90001] = "A word of dark binding that inflicts 346 to 402 Shadow damage. If the target survives, take 50% damage.",
+    [90002] = "Inflicts 500 to 580 Shadow damage. If the target survives, take 50% damage.",
+    [90003] = "Inflicts 700 to 810 Shadow damage. If the target survives, take 50% damage.",
+}
+-- Deliberately unordered, including future ranks, to catch last-slot selection.
+book = {
+    { spellID = 90003, subName = "Rank 3", level = 48 },
+    { spellID = 90001, subName = "Rank 1", level = 32 },
+    { spellID = 90002, subName = "Rank 2", level = 40 },
+}
+C_SpellBook = {
+    GetNumSpellBookSkillLines = function() return 1 end,
+    GetSpellBookSkillLineInfo = function() return { itemIndexOffset = 0, numSpellBookItems = #book } end,
+    GetSpellBookItemInfo = function(slot) book[slot].name = spellName; return book[slot] end,
+    GetSpellBookItemLevelLearned = function(slot) return book[slot].level end,
+    IsSpellKnown = function(id) return known[id] == true end,
+}
+cooldown = { isEnabled = true, isActive = false, startTime = secret, duration = secret }
+ownCooldown = false
+secretCooldownZero = nil
+usable, inRange, targetExists, hostile, targetDead, playerDead = true, true, true, true, false, false
+targetHealth = 345
+lastCooldownID = nil
+C_Spell = {
+    GetSpellInfo = function(id)
+        if id == 32379 or id == 401955 or damageText[id] then return { name = spellName } end
+        return { name = "Other spell" }
+    end,
+    GetSpellDescription = function(id) return damageText[id] end,
+    GetSpellTexture = function() return 1234 end,
+    GetSpellCooldown = function(id) lastCooldownID = id; return cooldown end,
+    GetSpellCooldownDuration = function(id, ignoreGCD)
+        assert(ignoreGCD == true)
+        local function ready() if secretCooldownZero ~= nil then return secretCooldownZero end; return not ownCooldown end
+        return { IsZero = ready, HasExpired = ready, Copy = function() return { HasExpired = ready } end }
+    end,
+    IsSpellUsable = function() return usable end,
+    IsSpellInRange = function() return inRange end,
+}
+function UnitExists() return targetExists end
+function UnitCanAttack() return hostile end
+function UnitIsDeadOrGhost(unit) if unit == "player" then return playerDead else return targetDead end end
+function UnitHealth(unit, predicted)
+    assert(unit == "target" and predicted == false)
+    return targetHealth
+end
+function Health(value) return setmetatable({ secret = true, nativeValue = value }, getmetatable(secret)) end
+function StartDeathCooldown()
+    ownCooldown = true; cooldown.isActive = true; cooldown.isOnGCD = false
+    Fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 90001)
+    Fire("SPELL_UPDATE_COOLDOWN")
+end
+PriestShieldTrackerDB = {}
+'''
+
+GLOW_SETUP = EXECUTE_SETUP + r'''
+PriestShieldTrackerDB = {}
+ActionButtonSpellAlertMixin = {}
+slots = { [1] = 90001, [2] = 90002 }
+macroSpell = 90001
+C_ActionBar = { GetSpell = function(slot) return slots[slot] end }
+function GetActionInfo(slot)
+    if slot == 13 then return "macro", 5 end
+    return "spell", slots[slot]
+end
+function GetMacroSpell() return macroSpell end
+ActionButton1 = CreateFrame("CheckButton", "ActionButton1", UIParent)
+ActionButton1.action = 1; ActionButton1:SetSize(36, 36); ActionButton1.secureAction = true
+ActionButton2 = CreateFrame("CheckButton", "ActionButton2", UIParent)
+ActionButton2.action = 2; ActionButton2:SetSize(36, 36); ActionButton2.secureAction = true
+MultiBarBottomLeftButton1 = CreateFrame("CheckButton", "MultiBarBottomLeftButton1", UIParent)
+MultiBarBottomLeftButton1.action = 13; MultiBarBottomLeftButton1:SetSize(40, 40); MultiBarBottomLeftButton1.secureAction = true
+function ButtonGlow(button)
+    for _, f in ipairs(frames) do
+        if f.kind == "StatusBar" and f.parent and f.parent.points[1] and f.parent.points[1][2] == button then
+            local gate, root = f, f.parent
+            for _, child in ipairs(frames) do
+                if child.kind == "Frame" and child.parent and child.parent.parent and child.parent.parent.parent == gate then
+                    return child, gate, root
+                end
+            end
+        end
+    end
+end
+'''
+
+EXECUTE_SETUP = GLOW_SETUP + r'''
+function ExecuteGlow() return ButtonGlow(ActionButton1) end
+'''
+
+case("execute learns only the highest known rank and checks that rank's cooldown", EXECUTE_SETUP, r'''
+assert(lastCooldownID == 90001 and select(2, ExecuteGlow()).minimum == 345)
+Command("execute"); assert(messages[#messages]:find("Rank 1", 1, true) and messages[#messages]:find("346", 1, true))
+known[90002], known[90003] = true, true
+slots[1] = 90003
+Fire("SPELLS_CHANGED"); Tick(0.05)
+assert(lastCooldownID == 90003 and select(2, ExecuteGlow()).minimum == 699)
+Command("execute"); assert(messages[#messages]:find("Rank 3", 1, true))
+known = {}; Fire("SPELLS_CHANGED"); Tick(0.05)
+assert(not ExecuteGlow():IsRendered())
+''')
+
+case("Forever spell-learn event updates execute rank while core startup and Random remain functional", EXECUTE_SETUP + r'''
+PriestShieldTrackerDB = { appearance = { preset = "Random", activePreset = "Ember" } }
+''', r'''
+local registered = false
+for _, frame in ipairs(frames) do
+    assert(not frame.events.LEARNED_SPELL_IN_TAB)
+    if frame.events.LEARNED_SPELL_IN_SKILL_LINE then registered = true end
+end
+assert(registered and PriestShieldTrackerOptions and Find("AuraContainer"))
+known[90002] = true
+Fire("LEARNED_SPELL_IN_SKILL_LINE", 90002); Tick(0.05)
+assert(lastCooldownID == 90002)
+local old = PriestShieldTrackerDB.appearance.activePreset
+Tick(1801); assert(PriestShieldTrackerDB.appearance.activePreset ~= old)
+''')
+
+case("execute native threshold is strict below 346 and accepts opaque combat health", EXECUTE_SETUP, r'''
+local label, gate = ExecuteGlow(), select(2, ExecuteGlow())
+assert(label:IsRendered())
+for _, hp in ipairs({ 347, 346, 345, 1 }) do
+    targetHealth = Health(hp); combat = true; auraRestricted = true; Tick(0.05)
+    assert(rawequal(gate.value, targetHealth))
+    assert(label:IsRendered() == (hp < 346))
+end
+assert(BlockedWrites() == 0)
+''')
+
+case("execute stays visible as a range cue during GCD but hides during its own cooldown and unusable states", EXECUTE_SETUP, r'''
+local label = ExecuteGlow()
+assert(label:IsRendered())
+StartDeathCooldown(); Tick(0.05); assert(not label:IsRendered())
+ownCooldown = false; Tick(0.05); assert(label:IsRendered())
+cooldown.isActive = false; Tick(0.05); assert(label:IsRendered())
+cooldown.isActive = false; cooldown.isEnabled = false; Tick(0.05); assert(not label:IsRendered())
+cooldown.isEnabled = true; usable = false; Tick(0.05); assert(not label:IsRendered())
+usable = true; inRange = false; Tick(0.05); assert(not label:IsRendered())
+inRange = nil; Tick(0.05); assert(not label:IsRendered())
+inRange = true; Tick(0.05); assert(label:IsRendered())
+cooldown.isActive = secret; Tick(0.05); assert(not label:IsRendered())
+cooldown.isActive = false; usable = secret; Tick(0.05); assert(not label:IsRendered())
+''')
+
+case("execute rejects friendly missing dead and unreadable targets", EXECUTE_SETUP, r'''
+local label = ExecuteGlow()
+hostile = false; Tick(0.05); assert(not label:IsRendered())
+hostile = true; targetExists = false; Tick(0.05); assert(not label:IsRendered())
+targetExists = true; targetDead = true; Tick(0.05); assert(not label:IsRendered())
+targetDead = false; playerDead = true; Tick(0.05); assert(not label:IsRendered())
+playerDead = false; hostile = secret; Tick(0.05); assert(not label:IsRendered())
+hostile = true; Tick(0.05); assert(label:IsRendered())
+''')
+
+case("execute damage parsing fails closed for unknown formulas percentages and decimals", EXECUTE_SETUP, r'''
+local parse = executeModule.MinimumDamage
+assert(parse("Inflige 1.234 a 1.450 de daño. Devuelve un 50%.") == 1234)
+assert(parse("Inflige 1\226\128\175234 à 1\226\128\175450 dégâts.") == 1234)
+assert(parse("Inflige |cffffffff346|r à |cffffffff402|r dégâts.") == 346)
+assert(not parse(secret) and not parse(nil) and not parse(""))
+assert(not parse("Deals $s1 to $s2 damage."))
+assert(not parse("Deals 346 damage, with 50% backlash."))
+assert(not parse("Uses 12% mana and deals 346 to 402 damage."))
+assert(not parse("Deals 346.5 to 402.5 damage."))
+damageText[90001] = nil; Fire("SPELL_TEXT_UPDATE"); Tick(0.05)
+assert(not ExecuteGlow():IsRendered())
+damageText[90001] = "Deals 400 to 450 damage."; Tick(2)
+assert(select(2, ExecuteGlow()).minimum == 399 and ExecuteGlow():IsRendered())
+''')
+
+
+
+case("execute uses localized spell names and rank descriptions", EXECUTE_SETUP + r'''
+function GetLocale() return "frFR" end
+spellName = "Mot de l’ombre : Mort"
+book[2].subName = "Rang 1"
+damageText[90001] = "Inflige 346 à 402 points de dégâts d’Ombre. Renvoie 50% des dégâts."
+''', r'''
+assert(ExecuteGlow():IsRendered())
+Command("execute"); assert(messages[#messages]:find("Rang 1", 1, true))
+assert(localeText["Shadow Word: Death"] ~= "Shadow Word: Death")
+''')
+
+case("execute health cooldown mana and target events update immediately without text refresh flicker", EXECUTE_SETUP, r'''
+local label, at = ExecuteGlow(), clock
+targetHealth = 400; Fire("UNIT_HEALTH", "target"); assert(not label:IsRendered())
+targetHealth = 345; Fire("UNIT_HEALTH", "target"); assert(label:IsRendered() and clock == at)
+for i = 1, 20 do Fire("SPELL_TEXT_UPDATE"); assert(label:IsRendered() and clock == at) end
+cooldown.isActive = true; Fire("SPELL_UPDATE_COOLDOWN")
+assert(label:IsRendered())
+cooldown.isActive = false; Fire("SPELL_UPDATE_COOLDOWN")
+assert(label:IsRendered())
+usable = false; Fire("UNIT_POWER_UPDATE", "player"); assert(not label:IsRendered())
+usable = true; Fire("UNIT_POWER_UPDATE", "player"); assert(label:IsRendered())
+targetExists = false; Fire("PLAYER_TARGET_CHANGED"); assert(not label:IsRendered())
+targetExists = true; targetHealth = 400; Fire("PLAYER_TARGET_CHANGED"); assert(not label:IsRendered())
+assert(clock == at)
+''')
+
+case("protected spell cooldown masks the GCD cue using native alpha without inspecting a secret", EXECUTE_SETUP, r'''
+local label = ExecuteGlow()
+combat = true; auraRestricted = true
+cooldown.isActive = true
+secretCooldownZero = setmetatable({secret = true, nativeValue = false}, getmetatable(secret))
+StartDeathCooldown(); assert(not label:IsRendered())
+assert(issecretvalue(select(2, ExecuteGlow()).alpha))
+secretCooldownZero = setmetatable({secret = true, nativeValue = true}, getmetatable(secret))
+Fire("SPELL_UPDATE_COOLDOWN"); assert(label:IsRendered())
+assert(BlockedWrites() == 0)
+''')
+
+case("execute and absorb clipping stays nonzero and independent across repeated secret health thresholds", EXECUTE_SETUP, r'''
+local label = ExecuteGlow()
+local healthClip, healthGate = label.parent.parent, select(2, ExecuteGlow())
+local absorbClip, absorbMeter = bar.parent, bar.parent.parent
+assert(#healthClip.points == 1 and healthClip.width == healthGate.width and healthClip.height == healthGate.height)
+assert(#absorbClip.points == 1 and absorbClip.width == absorbMeter.width and absorbClip.height == absorbMeter.height)
+local ct = Find("AuraContainer")
+NativeShown(ct.slots.shield.button, true); NativeShown(ct.slots.weakenedSoul.button, true)
+combat = true; auraRestricted = true
+for cycle = 1, 30 do
+    for _, hp in ipairs({400, 346, 345, 1, 400}) do
+        targetHealth = Health(hp); absorb = Health(300)
+        Fire("UNIT_HEALTH", "target"); Tick(0.1)
+        assert(label:IsRendered() == (hp < 346))
+        assert(bar:IsRendered() and ct.slots.shield.button:IsVisible() and ct.slots.weakenedSoul.button:IsVisible())
+        assert(healthClip.width > 0 and healthClip.height > 0 and absorbClip.width > 0 and absorbClip.height > 0)
+        assert(healthGate.interpolation == Enum.StatusBarInterpolation.Immediate)
+        assert(absorbMeter.interpolation == Enum.StatusBarInterpolation.Immediate)
+    end
+    targetHealth = Health(345); absorb = secretZero
+    Tick(0.1); assert(label:IsRendered() and not bar:IsRendered())
+    absorb = Health(200); Tick(0.1); assert(label:IsRendered() and bar:IsRendered())
+end
+assert(BlockedWrites() == 0)
+''')
+
+case("older cooldown APIs keep a successful SWD cast blocked until its cooldown clears", EXECUTE_SETUP, r'''
+local glow = ExecuteGlow()
+C_Spell.GetSpellCooldownDuration = nil
+StartDeathCooldown(); assert(not glow:IsRendered())
+cooldown.isActive = false; Fire("SPELL_UPDATE_COOLDOWN"); assert(glow:IsRendered())
+''')
+
+case("action glow is the default with native Retail proc art and no popup or secure button changes", GLOW_SETUP, r'''
+local glow, gate, root = ButtonGlow(ActionButton1)
+assert(PriestShieldTrackerDB.executeEnabled and PriestShieldTrackerDB.executeDisplay == nil)
+assert(glow and glow.template == "ActionButtonSpellAlertTemplate" and glow.ProcLoop.plays > 0)
+assert(glow:IsRendered() and root.parent == UIParent and not glow.nativeOwned)
+assert(PriestShieldTrackerExecuteGate == nil)
+assert(not ButtonGlow(ActionButton2):IsRendered())
+assert(ButtonGlow(MultiBarBottomLeftButton1):IsRendered())
+assert(not ActionButton1.SpellActivationAlert and ActionButton1.action == 1 and not ActionButton1.scripts.OnUpdate)
+assert(actionGlowModule.Count(90001) == 2)
+Command("edit")
+for _, frame in ipairs(frames) do if frame.groupKey == "execute" then assert(not frame:IsShown()) end end
+assert(not glow:IsRendered())
+Command("lock"); assert(glow:IsRendered())
+''')
+
+case("action glow consumes protected health and cooldown and stays visible through only the GCD", GLOW_SETUP, r'''
+local glow, gate = ButtonGlow(ActionButton1)
+combat = true; auraRestricted = true
+for _, hp in ipairs({400, 346, 345, 1, 400, 345}) do
+    targetHealth = Health(hp); Fire("UNIT_HEALTH", "target")
+    assert(glow:IsRendered() == (hp < 346) and rawequal(gate.value, targetHealth))
+end
+cooldown.isActive = true; Fire("SPELL_UPDATE_COOLDOWN"); assert(glow:IsRendered())
+StartDeathCooldown(); assert(not glow:IsRendered())
+ownCooldown = false; secretCooldownZero = setmetatable({secret = true, nativeValue = false}, getmetatable(secret))
+Fire("SPELL_UPDATE_COOLDOWN"); assert(not glow:IsRendered() and issecretvalue(gate.alpha))
+secretCooldownZero = setmetatable({secret = true, nativeValue = true}, getmetatable(secret))
+Fire("SPELL_UPDATE_COOLDOWN"); assert(glow:IsRendered() and issecretvalue(gate.alpha))
+usable = false; Fire("SPELL_UPDATE_USABLE"); assert(not glow:IsRendered())
+usable = true; inRange = false; Tick(0.05); assert(not glow:IsRendered())
+assert(BlockedWrites() == 0)
+''')
+
+case("action glow follows page changes rank upgrades macros bar visibility and fades", GLOW_SETUP, r'''
+local first, _, root = ButtonGlow(ActionButton1)
+local macro = ButtonGlow(MultiBarBottomLeftButton1)
+combat = true
+ActionButton1.action = 2; Fire("ACTIONBAR_PAGE_CHANGED"); Tick(0.05)
+assert(not first:IsRendered() and macro:IsRendered())
+ActionButton1.action = 1; Tick(0.05); assert(first:IsRendered())
+ActionButton1.shown = false; Tick(0.05); assert(not first:IsRendered())
+ActionButton1.shown = true; ActionButton1.alpha = 0; Tick(0.05); assert(not first:IsRendered())
+ActionButton1.alpha = 1; Tick(0.05); assert(first:IsRendered())
+known[90003] = true; Fire("LEARNED_SPELL_IN_SKILL_LINE", 90003)
+assert(not first:IsRendered() and not macro:IsRendered())
+slots[1] = 90003; macroSpell = 90003; Tick(0.05)
+assert(first:IsRendered() and macro:IsRendered())
+assert(not ActionButton1.SpellActivationAlert and BlockedWrites() == 0)
+''')
+
+case("settings checkbox controls only SWD glow with no text display controls", GLOW_SETUP, r'''
+local glow = ButtonGlow(ActionButton1)
+Command("settings")
+local panel = PriestShieldTrackerOptions
+local enabled = panel.executeEnabled
+assert(panel.executeDisplay == nil and enabled:GetChecked())
+enabled:SetChecked(false); enabled.scripts.OnClick(enabled)
+assert(not glow:IsRendered() and not PriestShieldTrackerDB.executeEnabled)
+assert(PriestShieldTrackerDB.groupOptions.shield.enabled and PriestShieldTrackerDB.groupOptions.weakenedSoul.enabled)
+enabled:SetChecked(true); enabled.scripts.OnClick(enabled)
+assert(glow:IsRendered() and PriestShieldTrackerDB.executeEnabled)
+assert(PriestShieldTrackerExecuteGate == nil)
+''')
+
+case("glowtest previews the assigned SWD buttons for five seconds and cancels on combat", GLOW_SETUP, r'''
+local glow = ButtonGlow(ActionButton1)
+targetExists = false; Fire("PLAYER_TARGET_CHANGED"); assert(not glow:IsRendered())
+Command("glowtest"); assert(glow:IsRendered())
+Tick(4.9); assert(glow:IsRendered())
+Tick(0.2); assert(not glow:IsRendered())
+Command("glowtest"); assert(glow:IsRendered())
+combat = true; Fire("PLAYER_REGEN_DISABLED"); Tick(0.05)
+assert(not glow:IsRendered() and BlockedWrites() == 0)
+''')
+
+case("missing native glow template uses an independent pulsing border", GLOW_SETUP + 'ActionButtonSpellAlertMixin = nil', r'''
+local glow = ButtonGlow(ActionButton1)
+assert(glow:IsRendered() and not glow.ProcLoop and glow.scripts.OnUpdate)
+targetHealth = 400; Fire("UNIT_HEALTH", "target"); assert(not glow:IsRendered())
+targetHealth = 345; Fire("UNIT_HEALTH", "target"); assert(glow:IsRendered())
+''')
+
+case("late action buttons are discovered after combat and overlays resize with their buttons", GLOW_SETUP, r'''
+combat = true
+MultiBarRightButton1 = CreateFrame("CheckButton", "MultiBarRightButton1", UIParent)
+MultiBarRightButton1.action = 1; MultiBarRightButton1.width = 50; MultiBarRightButton1.height = 50
+Fire("ACTIONBAR_SLOT_CHANGED"); Tick(1); assert(not ButtonGlow(MultiBarRightButton1))
+combat = false; Fire("PLAYER_REGEN_ENABLED"); Tick(0.05)
+local glow, gate, root = ButtonGlow(MultiBarRightButton1)
+assert(glow:IsRendered() and gate.width == 70 and root.width == 70)
+MultiBarRightButton1:SetSize(60, 40); MultiBarRightButton1:SetScale(1.5)
+Tick(1)
+assert(gate.width == 84 and gate.height == 56 and root.scale == 1.5)
+assert(BlockedWrites() == 0)
+''')
+
+CDM_SETUP = GLOW_SETUP + r'''
+EssentialCooldownViewer = CreateFrame("Frame", "EssentialCooldownViewer", UIParent)
+UtilityCooldownViewer = CreateFrame("Frame", "UtilityCooldownViewer", UIParent)
+function CooldownIcon(parent, spell)
+    local icon = CreateFrame("Frame", nil, parent)
+    icon:SetSize(40, 40); icon.currentSpell = spell
+    icon.GetSpellID = function(self) return self.currentSpell end
+    return icon
+end
+essentialIcon = CooldownIcon(EssentialCooldownViewer, 90001)
+utilityIcon = CooldownIcon(UtilityCooldownViewer, 90001)
+otherIcon = CooldownIcon(EssentialCooldownViewer, 90002)
+essentialActive = { [essentialIcon] = true, [otherIcon] = true }
+utilityActive = { [utilityIcon] = true }
+EssentialCooldownViewer.itemFramePool = { EnumerateActive = function() return pairs(essentialActive) end }
+UtilityCooldownViewer.itemFramePool = { EnumerateActive = function() return pairs(utilityActive) end }
+'''
+
+case("cooldown manager SWD icons glow alongside action buttons and share the five second test", CDM_SETUP, r'''
+local glow, gate, root = ButtonGlow(essentialIcon)
+assert(glow:IsRendered() and ButtonGlow(utilityIcon):IsRendered())
+assert(not ButtonGlow(otherIcon):IsRendered() and ButtonGlow(ActionButton1):IsRendered())
+assert(root.parent == UIParent and gate.width == 56 and not essentialIcon.action)
+assert(actionGlowModule.Count(90001) == 2 and actionGlowModule.Count(90001, "cooldown") == 2)
+Command("execute"); assert(messages[#messages]:find("Matching cooldown icons: 2", 1, true))
+Command("settings"); assert(PriestShieldTrackerOptions.executeEnabled:GetChecked() and PriestShieldTrackerOptions.executeDisplay == nil)
+targetHealth = 400; Fire("UNIT_HEALTH", "target"); assert(not glow:IsRendered())
+Command("glowtest"); assert(glow:IsRendered() and ButtonGlow(ActionButton1):IsRendered())
+Tick(5.1); assert(not glow:IsRendered() and not ButtonGlow(ActionButton1):IsRendered())
+''')
+
+case("cooldown icons recheck pooled identity visibility and protected metadata without modifying the icon", CDM_SETUP, r'''
+local glow = ButtonGlow(essentialIcon)
+combat = true; auraRestricted = true
+targetHealth = Health(345); Fire("UNIT_HEALTH", "target"); assert(glow:IsRendered())
+essentialIcon.currentSpell = 90002; Tick(0.05); assert(not glow:IsRendered())
+essentialIcon.currentSpell = secret; Tick(0.05); assert(not glow:IsRendered() and ButtonGlow(ActionButton1):IsRendered())
+essentialIcon.currentSpell = 90001; Tick(0.05); assert(glow:IsRendered())
+essentialIcon.forbidden = true; Tick(0.05); assert(not glow:IsRendered())
+essentialIcon.forbidden = false; Tick(0.05); assert(glow:IsRendered())
+NativeShown(EssentialCooldownViewer, false); Tick(0.05); assert(not glow:IsRendered())
+NativeShown(EssentialCooldownViewer, true); Tick(0.05); assert(glow:IsRendered())
+essentialIcon.alpha = 0; Tick(0.05); assert(not glow:IsRendered())
+essentialIcon.alpha = 1; Tick(0.05); assert(glow:IsRendered())
+StartDeathCooldown(); assert(not glow:IsRendered())
+assert(BlockedWrites() == 0 and essentialIcon.currentSpell == 90001 and not essentialIcon.SpellActivationAlert)
+''')
+
+case("cooldown glow follows native pooled icons reparented by a layout addon without duplicate overlays", CDM_SETUP, r'''
+local customBar = CreateFrame("Frame", "CustomCooldownBar", UIParent)
+essentialIcon:SetParent(customBar); essentialIcon:SetSize(50, 30); essentialIcon:SetScale(1.25)
+EssentialCooldownViewer.GetItemFrames = function() return {} end
+Tick(1)
+local glow, gate, root = ButtonGlow(essentialIcon)
+assert(glow:IsRendered() and root.parent == UIParent and gate.width == 70 and gate.height == 42 and root.scale == 1.25)
+local count = #frames
+for i = 1, 10 do Tick(1) end
+assert(#frames == count and actionGlowModule.Count(90001, "cooldown") == 2)
+essentialActive[essentialIcon] = nil; essentialIcon:Hide(); Tick(0.05); assert(not glow:IsRendered())
+essentialActive[essentialIcon] = true; essentialIcon:Show(); Tick(1); assert(glow:IsRendered() and #frames == count)
+''')
+
+case("cooldown discovery supports item-list and public cooldown-info fallbacks with exact overrides", CDM_SETUP + r'''
+EssentialCooldownViewer.itemFramePool = nil
+EssentialCooldownViewer.GetItemFrames = function() return { essentialIcon, otherIcon } end
+essentialIcon.GetSpellID = nil
+essentialIcon.cooldownInfo = { spellID = 80001, overrideSpellID = 90001 }
+essentialIcon.GetCooldownInfo = function(self) return self.cooldownInfo end
+utilityIcon.GetSpellID = nil; utilityIcon.cooldownID = 77
+C_CooldownViewer = { GetCooldownViewerCooldownInfo = function() return { spellID = 90001 } end }
+''', r'''
+assert(ButtonGlow(essentialIcon):IsRendered() and ButtonGlow(utilityIcon):IsRendered())
+essentialIcon.cooldownInfo.overrideSpellID = secret; Tick(0.05); assert(not ButtonGlow(essentialIcon):IsRendered())
+essentialIcon.cooldownInfo.overrideSpellID = nil; essentialIcon.cooldownInfo.spellID = 80001
+C_SpellBook.FindSpellOverrideByID = function(id) if id == 80001 then return 90001 else return id end end
+Tick(0.05); assert(ButtonGlow(essentialIcon):IsRendered())
+C_SpellBook.FindSpellOverrideByID = function() return secret end
+Tick(0.05); assert(not ButtonGlow(essentialIcon):IsRendered() and ButtonGlow(utilityIcon):IsRendered())
+''')
+
+case("saved SWD disable controls both glow locations and cannot change through stale combat clicks", CDM_SETUP + r'''
+PriestShieldTrackerDB = {executeDisplay = "action", groupOptions = {execute = {enabled = false}}}
+''', r'''
+local action, cooldown = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+assert(not action:IsRendered() and not cooldown:IsRendered())
+assert(PriestShieldTrackerDB.executeEnabled == false and PriestShieldTrackerDB.executeDisplay == nil)
+assert(PriestShieldTrackerDB.groupOptions.execute == nil and PriestShieldTrackerDB.groups.execute == nil)
+Command("settings")
+local panel = PriestShieldTrackerOptions
+assert(not panel.executeEnabled:GetChecked() and panel.executeDisplay == nil)
+assert(panel.executeNote.text == "Ignores resistances, absorbs, and damage reduction.")
+panel.executeEnabled:SetChecked(true); panel.executeEnabled.scripts.OnClick(panel.executeEnabled)
+assert(action:IsRendered() and cooldown:IsRendered())
+combat = true; Fire("PLAYER_REGEN_DISABLED")
+assert(not panel.executeEnabled.enabled and panel.executeDisplay == nil)
+panel.executeEnabled:SetChecked(false); panel.executeEnabled.scripts.OnClick(panel.executeEnabled)
+assert(PriestShieldTrackerDB.executeEnabled and action:IsRendered() and cooldown:IsRendered())
+combat = false; Fire("PLAYER_REGEN_ENABLED")
+assert(panel.executeEnabled:GetChecked())
+panel.executeEnabled:SetChecked(false); panel.executeEnabled.scripts.OnClick(panel.executeEnabled)
+assert(not action:IsRendered() and not cooldown:IsRendered())
+assert(PriestShieldTrackerDB.groupOptions.shield.enabled and PriestShieldTrackerDB.groupOptions.weakenedSoul.enabled)
+''')
+
+case("former text mode migrates to enabled icon glow without popup frames controls or Edit Mode group", GLOW_SETUP + r'''
+PriestShieldTrackerDB = {executeDisplay = "text", groupOptions = {execute = {enabled = true, fontSize = 24}}, groups = {execute = {x = 45, y = -12}}}
+''', r'''
+assert(ButtonGlow(ActionButton1):IsRendered() and PriestShieldTrackerDB.executeEnabled)
+assert(PriestShieldTrackerDB.executeDisplay == nil and PriestShieldTrackerDB.groupOptions.execute == nil and PriestShieldTrackerDB.groups.execute == nil)
+assert(PriestShieldTrackerExecuteGate == nil)
+Command("edit")
+local count = 0
+for _, frame in ipairs(frames) do
+    if frame.groupKey then assert(frame.groupKey ~= "execute"); count = count + 1 end
+    assert(frame.text ~= "Execute available" and frame.text ~= "Execute range")
+end
+assert(count == 2)
+Command("settings")
+local panel = PriestShieldTrackerOptions
+assert(panel.executeDisplay == nil and panel.executeEnabled:GetChecked())
+assert(panel.executeNote.text == "Ignores resistances, absorbs, and damage reduction.")
+''')
+
+case("execute update errors clear both glows without retaining removed popup UI", CDM_SETUP, r'''
+local action, cooldown = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+assert(action:IsRendered() and cooldown:IsRendered())
+local readHealth = UnitHealth
+UnitHealth = function() error("Health temporarily unavailable") end
+Fire("UNIT_HEALTH", "target")
+assert(not action:IsRendered() and not cooldown:IsRendered() and PriestShieldTrackerExecuteGate == nil)
+UnitHealth = readHealth; Fire("UNIT_HEALTH", "target")
+assert(action:IsRendered() and cooldown:IsRendered())
+''')
+
+case("GCD event keeps both glows stable when ignoreGCD returns nil and post-GCD flags wobble", CDM_SETUP, r'''
+local action, icon = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+C_Spell.GetSpellCooldownDuration = function() return nil end
+assert(action:IsRendered() and icon:IsRendered())
+cooldown.isActive = true; cooldown.isOnGCD = true
+Fire("SPELL_UPDATE_COOLDOWN")
+assert(action:IsRendered() and icon:IsRendered())
+for i = 1, 30 do
+    -- This field is unreliable between cooldown events. It must not hide a
+    -- glow whose event-time classification was only a global cooldown.
+    cooldown.isOnGCD = false
+    Tick(0.05)
+    assert(action:IsRendered() and icon:IsRendered())
+end
+cooldown.isActive = false; cooldown.isOnGCD = false; Fire("SPELL_UPDATE_COOLDOWN")
+cooldown.isActive = true
+for i = 1, 5 do Tick(0.05); assert(action:IsRendered() and icon:IsRendered()) end
+-- Unrelated cooldown misclassification must not arm a new SWD mask.
+cooldown.isOnGCD = false; Fire("SPELL_UPDATE_COOLDOWN")
+assert(action:IsRendered() and icon:IsRendered())
+StartDeathCooldown()
+assert(not action:IsRendered() and not icon:IsRendered())
+cooldown.isActive = false; Fire("SPELL_UPDATE_COOLDOWN")
+assert(action:IsRendered() and icon:IsRendered())
+''')
+
+case("actual SWD cooldown remains hidden beneath GCD and returns as soon as its cached duration expires", CDM_SETUP, r'''
+local action, icon = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+local expired = false
+local realDuration = { HasExpired = function() return expired end, IsZero = function() return false end }
+realDuration.Copy = function() return { HasExpired = function() return expired end } end
+C_Spell.GetSpellCooldownDuration = function() return realDuration end
+StartDeathCooldown(); assert(not action:IsRendered() and not icon:IsRendered())
+cooldown.isOnGCD = true
+C_Spell.GetSpellCooldownDuration = function() return nil end
+Fire("SPELL_UPDATE_COOLDOWN")
+for i = 1, 10 do Tick(0.05); assert(not action:IsRendered() and not icon:IsRendered()) end
+expired = setmetatable({secret = true, nativeValue = false}, getmetatable(secret))
+Tick(0.05); assert(not action:IsRendered() and not icon:IsRendered())
+expired = setmetatable({secret = true, nativeValue = true}, getmetatable(secret))
+Tick(0.05); assert(action:IsRendered() and icon:IsRendered())
+assert(issecretvalue(select(2, ButtonGlow(ActionButton1)).alpha))
+assert(BlockedWrites() == 0)
+''')
+
+case("GCD readiness cache cannot make a newly learned SWD rank appear off cooldown", GLOW_SETUP, r'''
+cooldown.isActive = true; cooldown.isOnGCD = true; Fire("SPELL_UPDATE_COOLDOWN")
+assert(ButtonGlow(ActionButton1):IsRendered())
+known[90003] = true; slots[1] = 90003; ownCooldown = true
+Fire("SPELLS_CHANGED")
+assert(not ButtonGlow(ActionButton1):IsRendered())
+cooldown.isOnGCD = false; Fire("SPELL_UPDATE_COOLDOWN")
+assert(not ButtonGlow(ActionButton1):IsRendered())
+cooldown.isActive = false; Fire("SPELL_UPDATE_COOLDOWN")
+assert(ButtonGlow(ActionButton1):IsRendered())
+''')
+
+case("glow diagnostics retain the public reason after a GCD usability failure clears", CDM_SETUP, r'''
+cooldown.isActive = true; cooldown.isOnGCD = true; Fire("SPELL_UPDATE_COOLDOWN")
+usable = false; Fire("SPELL_UPDATE_USABLE")
+assert(not ButtonGlow(ActionButton1):IsRendered())
+usable = true; Fire("SPELL_UPDATE_USABLE")
+assert(ButtonGlow(ActionButton1):IsRendered())
+for i = 1, 40 do Tick(0.05) end
+local output = table.concat(actionGlowModule.DebugLines(), "\n")
+assert(output:find("usable=false", 1, true) and output:find("GCD=true", 1, true))
+assert(output:find("matched; cooldownAlpha=1", 1, true))
+Command("glowdebug"); assert(messages[#messages]:find("loop=", 1, true))
+''')
+
+case("glow diagnostics distinguish protected icon identity and alpha without logging protected values", CDM_SETUP, r'''
+essentialIcon.currentSpell = secret; Tick(0.05)
+local output = table.concat(actionGlowModule.DebugLines(), "\n")
+assert(output:find("spell identity protected", 1, true))
+essentialIcon.currentSpell = 90001
+ActionButton1.alpha = setmetatable({secret = true, rendered = true}, getmetatable(secret))
+targetHealth = Health(345); Tick(0.05)
+output = table.concat(actionGlowModule.DebugLines(), "\n")
+assert(output:find("iconAlpha=protected", 1, true))
+assert(not output:find("nativeValue", 1, true) and PriestShieldTrackerDB.glowDebug == nil)
+for i = 1, 40 do usable = i % 2 == 0; Fire("SPELL_UPDATE_USABLE") end
+assert(#actionGlowModule.DebugLines() <= 17)
+''')
+
+case("a reused live cooldown timer cannot rearm an expired SWD snapshot during later GCDs", CDM_SETUP, r'''
+local action, icon = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+local function nativeBool(value) return setmetatable({secret = true, nativeValue = value}, getmetatable(secret)) end
+local live = { finish = clock + 12, copies = 0 }
+function live:HasExpired() return nativeBool(clock >= self.finish) end
+function live:IsZero() return nativeBool(false) end
+function live:Copy()
+    self.copies = self.copies + 1
+    local capturedEnd = self.finish
+    return {HasExpired = function() return nativeBool(clock >= capturedEnd) end}
+end
+C_Spell.GetSpellCooldownDuration = function() return live end
+StartDeathCooldown()
+assert(live.copies == 1 and not action:IsRendered() and not icon:IsRendered())
+Tick(12.1)
+assert(action:IsRendered() and icon:IsRendered())
+local plays = action.ProcLoop.plays
+for cycle = 1, 3 do
+    -- Reconfigure the shared API object to the new GCD, then report another
+    -- active/false-GCD update exactly like the trace's erroneous cache switch.
+    live.finish = clock + 1.5
+    cooldown.isOnGCD = true; Fire("SPELL_UPDATE_COOLDOWN")
+    cooldown.isOnGCD = false; Fire("SPELL_UPDATE_COOLDOWN")
+    for tick = 1, 30 do
+        Tick(0.05)
+        assert(action:IsRendered() and icon:IsRendered())
+    end
+end
+assert(live.copies == 1 and action.ProcLoop.plays == plays)
+live.finish = clock + 12; StartDeathCooldown()
+assert(live.copies == 2 and not action:IsRendered() and not icon:IsRendered())
+assert(BlockedWrites() == 0)
+''')
+
+case("unrelated cast and contradictory GCD updates never arm a real SWD mask once ready", CDM_SETUP, r'''
+local action, icon = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+local reads = 0
+C_Spell.GetSpellCooldownDuration = function()
+    reads = reads + 1
+    return {IsZero = function() return false end, HasExpired = function() return false end,
+        Copy = function() error("A GCD must not become a SWD snapshot") end}
+end
+cooldown.isActive = true; cooldown.isOnGCD = true; Fire("SPELL_UPDATE_COOLDOWN")
+Fire("UNIT_SPELLCAST_SUCCEEDED", "player", secret, 12345)
+Fire("UNIT_SPELLCAST_SUCCEEDED", "target", secret, 90001)
+cooldown.isOnGCD = false; Fire("SPELL_UPDATE_COOLDOWN")
+for i = 1, 30 do Tick(0.05); assert(action:IsRendered() and icon:IsRendered()) end
+assert(reads == 0)
+''')
+
+case("reload with an existing SWD cooldown bootstraps a snapshot without exposing cast data", CDM_SETUP + r'''
+cooldown.isActive = true; cooldown.isOnGCD = false; ownCooldown = true
+''', r'''
+local action, icon = ButtonGlow(ActionButton1), ButtonGlow(essentialIcon)
+assert(not action:IsRendered() and not icon:IsRendered())
+Fire("SPELL_UPDATE_COOLDOWN")
+assert(not action:IsRendered() and not icon:IsRendered())
+ownCooldown = false; cooldown.isOnGCD = true; Fire("SPELL_UPDATE_COOLDOWN")
+assert(action:IsRendered() and icon:IsRendered())
+Fire("UNIT_SPELLCAST_SUCCEEDED", "player", secret, secret)
+assert(action:IsRendered() and icon:IsRendered() and BlockedWrites() == 0)
+''')
+
 print(f"{cases_run} logic checks passed; live client validation remains required.")

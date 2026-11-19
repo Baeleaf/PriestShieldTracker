@@ -25,14 +25,29 @@ local presets = {
     Ember = { absorb = { 0.88, 0.26, 0.07 }, duration = { 1, 0.59, 0.19 }, background = { 0.06, 0.02, 0.015 }, labels = { 1, 0.87, 0.74 }, ready = { 1, 0.7, 0.39 } },
     Void = { absorb = { 0.37, 0.2, 0.7 }, duration = { 0.74, 0.38, 1 }, background = { 0.025, 0.015, 0.05 }, labels = { 0.88, 0.8, 1 }, ready = { 0.8, 0.65, 1 } },
 }
-local options
+local options, savedDB, nextRandomAt
 local function Copy(c) return { c[1], c[2], c[3] } end
+local function SetPalette(name)
+    for _, key in ipairs(keys) do options.colors[key] = Copy(presets[name][key] or base[key]) end
+    options.activePreset = name
+end
+local function RandomPalette()
+    -- Pick another named palette, without reseeding WoW's shared random generator.
+    local previous
+    for index, name in ipairs(A.presetNames) do
+        if name == options.activePreset then previous = index; break end
+    end
+    local index = math.random(1, #A.presetNames - (previous and 1 or 0))
+    if previous and index >= previous then index = index + 1 end
+    SetPalette(A.presetNames[index])
+    nextRandomAt = GetTime() + math.random(15 * 60, 30 * 60)
+end
 function A.Init(db)
     if type(db.appearance) ~= "table" then db.appearance = {} end
-    options = db.appearance
+    options, savedDB, nextRandomAt = db.appearance, db, nil
     if options.style ~= "classic" and options.style ~= "smooth" and options.style ~= "liquid" then options.style = "liquid" end
     if type(options.colors) ~= "table" then options.colors = {} end
-    if not presets[options.preset] and options.preset ~= "Custom" then options.preset = "Soul" end
+    if not presets[options.preset] and options.preset ~= "Custom" and options.preset ~= "Random" then options.preset = "Soul" end
     for _, key in ipairs(keys) do
         local c = options.colors[key]
         local valid = type(c) == "table"
@@ -43,12 +58,25 @@ function A.Init(db)
         end
         if not valid then options.colors[key] = Copy(base[key]) end
     end
+    if options.preset == "Random" then
+        -- Pick before constructing widgets, including when reloading in combat.
+        RandomPalette()
+    elseif presets[options.preset] then
+        options.activePreset = options.preset
+    end
 end
 function A.Color(key) return unpack(options.colors[key]) end
 function A.Preset(name)
+    if name == "Random" then
+        options.preset = "Random"
+        nextRandomAt = GetTime()
+        A.RotateIfDue()
+        return
+    end
     if not presets[name] then return end
-    for _, key in ipairs(keys) do options.colors[key] = Copy(presets[name][key] or base[key]) end
+    SetPalette(name)
     options.preset = name
+    nextRandomAt = nil
     A.Apply()
 end
 function A.Text(region, key)
@@ -167,4 +195,16 @@ function A.Apply()
         else A.pending = true end
     end
     for _, status in ipairs(A.bars) do A.StyleBar(status) end
+end
+
+function A.RotateIfDue()
+    if not options or options.preset ~= "Random" or not nextRandomAt or GetTime() < nextRandomAt then return end
+    if InCombatLockdown() or savedDB.locked == false then return end
+    if ns.Options and ns.Options.IsChoosingColor and ns.Options.IsChoosingColor() then return end
+    -- Game-owned aura regions may remain locked indefinitely in an instance.
+    -- Rotate accessible displays now; Apply keeps locked regions pending and
+    -- retries them when access returns, just as with a manual palette change.
+    RandomPalette()
+    A.Apply()
+    if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
 end

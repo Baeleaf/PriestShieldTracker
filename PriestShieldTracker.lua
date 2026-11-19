@@ -1,4 +1,5 @@
 local addonName, ns = ...
+local L = ns.L
 local Appearance = ns.Appearance
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
@@ -19,7 +20,7 @@ local nativeFailure
 local shieldButton, absorbLabel
 local nativeParts, handles = {}, {}
 local StopPreview, StartPreview
-local absorbGate, timerFormatter
+local absorbGate, absorbClip, timerFormatter
 local textRegions = {}
 local nativeReadyCross, settingsPanel, selectedGroup = nil, nil, "weakenedSoul"
 local focusedGroup
@@ -41,7 +42,7 @@ local parts = {
 
 local function ReadyWidth()
     local options = db.groupOptions.weakenedSoul
-    return 154 * options.fontSize / 16 + 8 + (options.showIcon and options.iconSize + 6 or 0)
+    return (154 + ns.ReadyLabelWidth - 112) * options.fontSize / 16 + 8 + (options.showIcon and options.iconSize + 6 or 0)
 end
 
 local function FontSize(size, group, role)
@@ -78,12 +79,14 @@ local function PlacePart(region, key, relativeBar, relativeLabel)
     if spec.height and not spec.width then
         region:SetSize(db.width * options.scale, (key == "absorb" and db.barHeight or spec.height) * options.scale)
     end
-    if key == "weakenedLabel" then region:SetWidth(spec.width * options.fontSize / 16 * options.scale) end
+    if key == "weakenedLabel" then region:SetWidth((spec.width + ns.ReadyLabelWidth - 112) * options.fontSize / 16 * options.scale) end
     if key == "weakenedIcon" then region:SetSize(options.iconSize * options.scale, options.iconSize * options.scale) end
 end
 
 local function LayoutParts()
     PlacePart(absorbGate, "absorb")
+    local clipScale = db.groupOptions.shield.scale
+    absorbClip:SetSize(db.width * clipScale, db.barHeight * clipScale)
     PlacePart(bar, "absorb")
     PlacePart(absorbLabel, "absorbLabel")
     PlacePart(amountText, "absorbAmount")
@@ -119,12 +122,15 @@ local function LayoutParts()
         handle:SetPoint(point, hud, point, offset.x, spec.y + offset.y)
         local options = db.groupOptions[key]
         local width = key == "weakenedSoul" and ReadyWidth() or db.width
-        local height = key == "weakenedSoul" and math.max(26 * options.fontSize / 16, options.showIcon and options.iconSize + 6 or 0) or db.barHeight + 28
+        local height = key == "weakenedSoul" and math.max(26 * options.fontSize / 16, options.showIcon and options.iconSize + 6 or 0)
+            or db.barHeight + 28
         handle:SetSize(width * options.scale, height * options.scale)
+        handle.disabledText:SetWidth(math.max(40, width * options.scale - 12))
         -- Disabled groups stay selectable in Edit Mode so they can be enabled again.
         handle:SetShown(not db.locked)
         handle.disabledText:SetShown(not db.locked and not options.enabled)
     end
+    ns.Execute.Refresh()
 end
 
 local function Secret(value)
@@ -132,7 +138,7 @@ local function Secret(value)
 end
 
 local function Print(message)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffc8a0ffPriestShieldTracker:|r " .. message)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffc8a0ffPriestShieldTracker:|r " .. L[message])
 end
 
 local function ClearGroupFocus()
@@ -190,7 +196,7 @@ local function BuildAbsorb(parent)
     textLayer:SetAllPoints(status)
     textLayer:SetFrameLevel(status:GetFrameLevel() + 3)
     local label = Text(textLayer, 11, 0.95, 0.91, 1, "shield")
-    label:SetText("Absorb")
+    label:SetText(L["Absorb"])
     local amount = Text(textLayer, 12, 1, 1, 1, "shield", "number")
     -- Follow the native fill without inspecting its secret value or geometry.
     local edge = status:CreateTexture(nil, "OVERLAY")
@@ -247,7 +253,7 @@ local function UpdateAbsorb()
     -- SetValue explicitly accepts secret inputs from tainted addon execution.
     -- A 0..1 native fill clips the display to nothing at zero, or full width
     -- for positive whole-point absorbs. Never evaluate or inspect that fill.
-    absorbGate:SetValue(amount)
+    absorbGate:SetValue(amount, Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate)
 end
 
 local function Layout()
@@ -286,7 +292,7 @@ local function NativeTimer(button, shield)
         duration:SetPoint("TOPRIGHT")
         local label = Text(button, 11, 0.8, 0.77, 0.86, "shield")
         label:SetPoint("TOPLEFT", 0, -8)
-        label:SetText("Shield expires in")
+        label:SetText(L["Shield expires in"])
         local countdown = Text(button, 11, 0.9, 0.86, 1, "shield", "number")
         countdown:SetPoint("TOPRIGHT", 0, -8)
         button:SetDurationBar(duration, { direction = Enum.StatusBarTimerDirection.RemainingTime })
@@ -303,7 +309,7 @@ local function NativeTimer(button, shield)
         button:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
         local name = Text(button, 16, 0.94, 0.88, 0.74, "weakenedSoul")
         name:SetJustifyH("RIGHT")
-        name:SetText("Shield Ready")
+        name:SetText(L["Shield Ready"])
         local countdown = Text(button, 18, 0.94, 0.88, 0.74, "weakenedSoul")
         countdown:SetJustifyH("LEFT")
         button:SetDurationText(countdown, TimerOptions())
@@ -325,7 +331,7 @@ local function SetupNativeTimers()
         C_AddOns.LoadAddOn("Blizzard_AuraContainer")
     end
     if not C_AuraContainerUtil or not CustomAuraContainerSlotDefaultOptions then
-        error("This client does not expose the native aura display.")
+        error(L["This client does not expose the native aura display."])
     end
     container = CreateFrame("AuraContainer", nil, auraRoot, "CustomAuraContainerTemplate")
     container:SetAllPoints(hud)
@@ -366,7 +372,7 @@ local function BuildPreview()
     preview.absorb, preview.absorbLabel, preview.absorbAmount = BuildAbsorb(preview)
     preview.ws = Text(preview, 16, 0.94, 0.88, 0.74, "weakenedSoul")
     preview.ws:SetPoint("TOPLEFT", 0, -4)
-    preview.ws:SetText("Shield Ready")
+    preview.ws:SetText(L["Shield Ready"])
     preview.ws:SetJustifyH("RIGHT")
     preview.wsTime = Text(preview, 18, 0.94, 0.88, 0.74, "weakenedSoul")
     preview.wsTime:SetPoint("TOPRIGHT", 0, -3)
@@ -381,7 +387,7 @@ local function BuildPreview()
     preview.duration:SetMinMaxValues(0, 30)
     preview.label = Text(preview, 11, 0.8, 0.77, 0.86, "shield")
     preview.label:SetPoint("TOPLEFT", 0, -56)
-    preview.label:SetText("Shield expires in")
+    preview.label:SetText(L["Shield expires in"])
     preview.time = Text(preview, 11, 0.9, 0.86, 1, "shield", "number")
     preview.time:SetPoint("TOPRIGHT", 0, -56)
     preview.parts = {
@@ -409,10 +415,10 @@ local function BuildHandles()
         background:SetColorTexture(0.65, 0.45, 1, 0.18)
         handle.disabledText = Text(handle, 11, 0.85, 0.83, 0.9)
         handle.disabledText:SetPoint("CENTER")
-        handle.disabledText:SetText("Disabled - click for settings")
+        handle.disabledText:SetText(L["Disabled - click for settings"])
         handle:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(spec.title .. ": drag to move, click for settings")
+            GameTooltip:SetText(string.format(L["%s: drag to move, click for settings"], L[spec.title]))
             GameTooltip:Show()
         end)
         handle:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -467,12 +473,14 @@ StopPreview = function()
     -- Only toggle our ordinary wrapper, including at combat entry. Never
     -- touch the restricted aura container/button to leave preview mode.
     liveRoot:Show()
+    ns.Execute.SetPreview(false)
     UpdateAbsorb()
 end
 
 StartPreview = function()
     previewStarted = GetTime()
     liveRoot:Hide()
+    ns.Execute.SetPreview(true)
     preview:Show()
     hud:SetScript("OnUpdate", TickPreview)
     TickPreview()
@@ -497,13 +505,13 @@ local function AddSettingsSlider(panel, key, caption, low, high, step, y, format
     slider.refresh = function()
         local value = getter()
         slider:SetValue(value)
-        slider.caption:SetText(caption .. ": " .. string.format(format, value))
+        slider.caption:SetText(L[caption] .. ": " .. string.format(format, value))
     end
     slider:SetScript("OnValueChanged", function(_, value)
         if updatingControls or InCombatLockdown() or db.locked then return end
         value = math.max(low, math.min(high, math.floor(value / step + 0.5) * step))
         setter(value)
-        slider.caption:SetText(caption .. ": " .. string.format(format, value))
+        slider.caption:SetText(L[caption] .. ": " .. string.format(format, value))
         Layout()
     end)
     local descriptions = {
@@ -572,7 +580,7 @@ local function BuildSettingsPanel()
     enabled:SetSize(26, 26); enabled:SetPoint("TOPLEFT", 18, -64)
     enabled:SetHitRectInsets(0, -70, 0, 0)
     local enabledLabel = Text(enabled, 12)
-    enabledLabel:SetPoint("LEFT", enabled, "RIGHT", 4, 0); enabledLabel:SetText("Enabled")
+    enabledLabel:SetPoint("LEFT", enabled, "RIGHT", 4, 0); enabledLabel:SetText(L["Enabled"])
     enabled.refresh = function() enabled:SetChecked(db.groupOptions[selectedGroup].enabled) end
     enabled:SetScript("OnClick", function(self)
         if updatingControls or InCombatLockdown() or db.locked then return end
@@ -603,7 +611,8 @@ local function BuildSettingsPanel()
     showIcon:SetHitRectInsets(0, -230, 0, 0)
     local iconLabel = Text(showIcon, 12)
     iconLabel:SetPoint("LEFT", showIcon, "RIGHT", 4, 0)
-    iconLabel:SetText("Show crossed-out shield icon")
+    iconLabel:SetText(L["Show crossed-out shield icon"])
+    iconLabel:SetWidth(232); iconLabel:SetJustifyH("LEFT")
     showIcon.refresh = function() showIcon:SetChecked(db.groupOptions.weakenedSoul.showIcon) end
     showIcon:SetScript("OnClick", function(self)
         if updatingControls or InCombatLockdown() or db.locked or selectedGroup ~= "weakenedSoul" then return end
@@ -613,11 +622,12 @@ local function BuildSettingsPanel()
     ns.Options.Tooltip(showIcon, "Crossed-out shield icon", "Show a crossed-out shield beside your personal countdown while Weakened Soul prevents you from shielding yourself again.")
     local help = Text(panel, 11, 0.75, 0.73, 0.8)
     help:SetPoint("BOTTOM", 0, 65)
-    help:SetText("Drag a group to move it.\nChanges save automatically for this character.")
+    help:SetWidth(260)
+    help:SetText(L["Drag a group to move it.\nChanges save automatically for this character."])
     local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     panel.resetButton = reset
     reset:SetSize(124, 26); reset:SetPoint("BOTTOMLEFT", 20, 20)
-    reset:SetText("Reset group")
+    reset:SetText(L["Reset group"])
     reset:SetScript("OnClick", function()
         if InCombatLockdown() or db.locked then return end
         for key, value in pairs(groupDefaults[selectedGroup]) do
@@ -630,7 +640,7 @@ local function BuildSettingsPanel()
     local save = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     panel.saveButton = save
     save:SetSize(124, 26); save:SetPoint("BOTTOMRIGHT", -20, 20)
-    save:SetText("Save")
+    save:SetText(L["Save"])
     save:SetScript("OnClick", function() CloseEditMode() end)
     ns.Options.Tooltip(reset, "Reset group", "Enable this group and restore its default position and sizes. The other group stays as it is.")
     ns.Options.Tooltip(save, "Save", "Finish editing and return to your live display. Changes are saved for this character.")
@@ -653,7 +663,7 @@ ShowSettings = function(group)
     controls.iconSize:SetShown(selectedGroup == "weakenedSoul")
     controls.showIcon:SetShown(selectedGroup == "weakenedSoul")
     settingsPanel:SetHeight(selectedGroup == "shield" and 404 or 394)
-    settingsPanel.subtitle:SetText(selectedGroup == "shield" and "Absorb display" or "Shield Ready")
+    settingsPanel.subtitle:SetText(L[selectedGroup == "shield" and "Absorb display" or "Shield Ready"])
     updatingControls = false
     settingsPanel:Show()
 end
@@ -770,13 +780,15 @@ local function Initialize()
     absorbGate:SetStatusBarColor(1, 1, 1, 0)
     absorbGate:SetMinMaxValues(0, 1)
     absorbGate:SetValue(0)
-    local absorbClip = CreateFrame("Frame", nil, absorbGate)
-    absorbClip:SetAllPoints(absorbGate:GetStatusBarTexture())
+    absorbClip = CreateFrame("Frame", nil, absorbGate)
+    -- Keep the clip nonzero: its right edge follows the fill, sliding the
+    -- fixed-size window completely left of our bar when absorption is zero.
+    absorbClip:SetPoint("TOPRIGHT", absorbGate:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
     absorbClip:SetClipsChildren(true)
     bar, absorbLabel, amountText = BuildAbsorb(absorbClip)
     hud.moveHandle = CreateFrame("Frame", nil, hud)
     hud.moveHandle:SetFrameStrata("DIALOG")
-    hud.moveHandle:SetSize(280, 20)
+    hud.moveHandle:SetSize(ns.IsEnglish and 280 or 420, 20)
     hud.moveHandle:SetPoint("BOTTOM", hud, "TOP", 0, 4)
     hud.moveHandle:EnableMouse(true)
     hud.moveHandle:RegisterForDrag("LeftButton")
@@ -784,10 +796,11 @@ local function Initialize()
     hud.moveHandle:SetScript("OnDragStop", function() hud:GetScript("OnDragStop")(hud) end)
     hud.moveHint = Text(hud.moveHandle, 10, 0.85, 0.8, 0.95)
     hud.moveHint:SetPoint("CENTER")
-    hud.moveHint:SetText("Move entire display  |  Click a group for settings")
+    hud.moveHint:SetText(L["Move entire display  |  Click a group for settings"])
     Layout()
     if type(db.reference) == "number" and db.reference > 0 then SetMaximum(db.reference) end
     BuildPreview()
+    ns.Execute.Initialize(db)
     local ok, failure = pcall(SetupNativeTimers)
     if not ok then
         nativeFailure = tostring(failure)
@@ -844,6 +857,7 @@ events:SetScript("OnUpdate", function(_, elapsed)
         if not InCombatLockdown() then
             if pendingLayout then Layout() end
             if Appearance.pending then Appearance.Apply() end
+            Appearance.RotateIfDue()
         end
     end
 end)
@@ -890,6 +904,11 @@ SlashCmdList.PRIESTSHIELDTRACKER = function(message)
         Print(nativeFailure or "Native timers active. Absorb values include all active shields.")
         return
     end
+    if command == "execute" then Print(ns.Execute.Status()); return end
+    if command == "glowdebug" then
+        for _, line in ipairs(ns.Execute.DebugLines()) do Print(line) end
+        return
+    end
     if InCombatLockdown() then Print("Change the layout or preview after combat."); return end
     if command == "settings" or command == "options" then
         ns.Options.Open()
@@ -900,11 +919,13 @@ SlashCmdList.PRIESTSHIELDTRACKER = function(message)
     elseif command == "test" then
         if not db.locked then Print("Finish Edit Mode, then /pst test for the animated preview.")
         elseif previewStarted then StopPreview() else StartPreview() end
+    elseif command == "glowtest" then
+        ns.Execute.TestGlow()
     elseif command == "scale" or command == "width" then
         local value = tonumber(argument)
         local low, high = command == "scale" and 0.5 or 180, command == "scale" and 2 or 500
         if not value or value ~= value or value < low or value > high then
-            Print(command .. " must be between " .. low .. " and " .. high .. "."); return
+            Print(string.format(L["%s must be between %s and %s."], command, low, high)); return
         end
         db[command] = value
         Layout()
@@ -926,11 +947,12 @@ SlashCmdList.PRIESTSHIELDTRACKER = function(message)
         for group, options in pairs(groupDefaults) do
             for key, value in pairs(options) do db.groupOptions[group][key] = value end
         end
+        db.executeEnabled = true
         db.appearance.style = "liquid"
         Appearance.Preset("Soul")
         Layout()
         if wasEditing then BeginEditing(editModeActive) end
     else
-        Print("/pst edit | settings | test | calibrate | reset | status")
+        Print("/pst edit | settings | test | calibrate | reset | status | glowdebug")
     end
 end

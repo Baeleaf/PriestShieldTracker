@@ -15,6 +15,8 @@ PriestShieldTracker helps priests in **WoW Forever** see how much protection rem
 - **Shield timer:** See how much time is left on Power Word: Shield, even if Weakened Soul is still counting down.
 - **Make it fit your UI:** Move the bars and countdown separately, and adjust text, icon, and bar sizes.
 - **Saved layouts:** Keep your settings for each character across logins and reloads.
+- **Shadow Word: Death execute glow:** Your highest learned rank glows on matching action buttons and cooldown manager icons when the target is below its minimum damage estimate and the spell is ready. The glow stays visible through the GCD.
+- **Automatic language support:** Uses your game language, with English fallback.
 - **Party and raid indicators:** Small Weakened Soul icons on Blizzard's group frames show a cooldown swipe and countdown. WeakenedSoulTracker is not required.
 
 ## Live Party-Frame Tracking
@@ -35,7 +37,9 @@ Open **Esc > Edit Mode** or type `/pst`. Click either group to change its settin
 
 ![PriestShieldTracker cycling through Classic, Smooth, and Liquid bars with selected color palettes](docs/images/priestshieldtracker-customization.gif)
 
-Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes in **Options > AddOns > PriestShieldTracker**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
+Choose **Classic**, **Smooth**, or **Liquid** bars and six color palettes, plus **Random**, in **Options > AddOns > PriestShieldTracker**. Bar and text colors can also be adjusted separately. Keep sizing and positioning in Edit Mode.
+
+**Random** chooses a different palette on login/reload and every 15–30 minutes, waiting until combat and editing finish.
 
 **Left-click** the minimap shield to open or close settings. **Right-click** to open or close Edit Mode.
 
@@ -47,7 +51,9 @@ In **Options > AddOns > PriestShieldTracker** (`/pst settings`), turn Weakened S
 
 In **Edit Mode**, click **Shield Ready** or **Absorb display** and use **Enabled** to turn that group on or off. The Shield Ready window also contains **Show crossed-out shield icon**. Disabled groups remain selectable in Edit Mode so you can turn them back on.
 
-All three features are enabled by default and saved for each character. Change these settings outside combat.
+The **Shadow Word: Death > Enabled** checkbox in AddOns settings controls its icon glow. The estimate ignores resistances, absorbs, and damage reduction.
+
+Features are enabled by default and saved for each character. Change these settings outside combat.
 
 ## Usage
 
@@ -56,10 +62,12 @@ Cast **Power Word: Shield** on yourself to see the display. Shield yourself outs
 - `/pst` - Open Edit Mode.
 - `/pst test` - Preview the animated bars. Run it again to stop.
 - `/pst reset` - Restore the default layout.
+- `/pst glowtest` - Preview matching SWD icon glows for five seconds outside combat.
+- `/pst execute` - Show the detected SWD rank, damage estimate, and matching icon counts.
 
 ## Installation
 
-Version **0.3.3** supports **WoW Forever 1.60.1**.
+Version **0.3.4** supports **WoW Forever 1.60.1**.
 
 1. Download the PriestShieldTracker ZIP from [GitHub Releases](https://github.com/Baeleaf/PriestShieldTracker/releases).
 2. Extract both included folders into `World of Warcraft/_forever_/Interface/AddOns/`. The small settings importer preserves your previous layout.

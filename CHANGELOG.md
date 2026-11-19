@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.4 - November 19, 2026
+
+- Add Shadow Word: Death execute-estimate glows on action buttons and matching cooldown manager icons, using the highest learned rank. Glows stay visible through the global cooldown and respect SWD's own cooldown.
+- Add an Enabled checkbox for the SWD indicator. The estimate ignores resistances, absorbs, and damage reduction.
+- Automatically use the game client's language, with nine translated languages and English fallback. Non-English settings include a short note inviting wording corrections.
+- Add a Random color palette that changes on login/reload and every 15–30 minutes, waiting for combat and editing to finish. Fix rotations getting stuck on locked timer regions.
+- Show the installed version at the bottom of settings.
+- Improve execute/absorb display stability and add `/pst glowtest`, `/pst execute`, and `/pst glowdebug` for previews and troubleshooting.
+
 ## 0.3.3 - November 16, 2026
 
 - Improve preview text readability so it matches the live display, including bright Holy bars.

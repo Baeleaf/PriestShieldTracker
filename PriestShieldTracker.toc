@@ -2,17 +2,30 @@
 ## AllowLoadGameType: camelot
 ## Title: PriestShieldTracker
 ## Notes: Personal Weakened Soul tracker, Power Word: Shield timer, and absorb bar for priests.
+## Notes-deDE: Persönlicher Schild- und Geschwächte-Seele-Tracker für Priester.
+## Notes-frFR: Suivi du bouclier, de l'absorption et d'Âme affaiblie pour les prêtres.
+## Notes-esES: Seguimiento del escudo, la absorción y Alma debilitada para sacerdotes.
+## Notes-esMX: Seguimiento del escudo, la absorción y Alma debilitada para sacerdotes.
+## Notes-ptBR: Acompanha o escudo, a absorção e Alma Enfraquecida para sacerdotes.
+## Notes-itIT: Monitora scudo, assorbimento e Anima indebolita per i sacerdoti.
+## Notes-ruRU: Отслеживание щита, поглощения и Ослабленной души для жрецов.
+## Notes-koKR: 사제의 보호막, 흡수량 및 약화된 영혼을 추적합니다.
+## Notes-zhCN: 为牧师显示护盾、吸收量和虚弱灵魂计时。
+## Notes-zhTW: 為牧師顯示護盾、吸收量和虛弱靈魂計時。
 ## Author: Baeleaf
 ## X-License: All Rights Reserved
-## Version: 0.3.3
+## Version: 0.3.4
 ## X-Curse-Project-ID: 1805535
 ## SavedVariablesPerCharacter: PriestShieldTrackerDB
-## OptionalDeps: SoulShield, Blizzard_AuraContainer, Blizzard_EditMode
+## OptionalDeps: SoulShield, Blizzard_AuraContainer, Blizzard_EditMode, Blizzard_ActionBar
 
+Localization.lua
 Access.lua
 Compatibility.lua
 Appearance.lua
 GroupAuraNative.lua
 GroupFrames.lua
 Options.lua
+ActionGlow.lua
+Execute.lua
 PriestShieldTracker.lua

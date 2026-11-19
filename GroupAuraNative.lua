@@ -22,6 +22,7 @@
 -- top of an "others" slot (purple) at the same spot.
 
 local _, ns = ...
+local L = ns.L
 
 local Native = {
     available = false,  -- the AuraContainer API exists on this client
@@ -204,7 +205,7 @@ function Native.UpdatePreview(h, remaining)
     h.cooldown:SetCooldown(GetTime() - (15 - remaining), 15)
     h.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", db.size >= 20 and 12 or 10, "OUTLINE")
     local format = db.timeFormat
-    h.text:SetText(format == "icon" and "" or tostring(math.ceil(remaining)) .. (format == "seconds" and "s" or ""))
+    h.text:SetText(format == "icon" and "" or string.format(format == "seconds" and L["%ds"] or "%d", math.ceil(remaining)))
     local color = db.soonReady > 0 and remaining < db.soonReady and SOON_COLOR or NORMAL_COLOR
     h.text:SetTextColor(unpack(color))
 end

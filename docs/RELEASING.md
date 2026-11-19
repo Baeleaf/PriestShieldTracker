@@ -20,6 +20,10 @@ For future setup or replacement:
 
 ## Each release
 
+Increment the version after every addon update, including local-only changes.
+For local builds, use the next `beta.N` suffix and keep both importer versions
+in sync with the main TOC. The settings footer reads the installed TOC version.
+
 1. Install the upcoming release into the owner's local WoW Forever AddOns folder
    before publishing. Preserve character SavedVariables and local development
    files. Verify the installed runtime files against the release package, then

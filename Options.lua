@@ -1,5 +1,6 @@
 -- Appearance lives in AddOns options; Edit Mode handles layout and group visibility.
-local _, ns = ...
+local addonName, ns = ...
+local L = ns.L
 local A = ns.Appearance
 local O = {}
 ns.Options = O
@@ -13,7 +14,7 @@ local function Label(parent, text, size, x, y, colorKey)
     label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, colorKey and "OUTLINE" or "")
     if colorKey then label:SetShadowOffset(1, -1) end
     label:SetPoint("TOPLEFT", x, y)
-    label:SetText(text)
+    label:SetText(L[text])
     if colorKey then A.Text(label, colorKey) end
     return label
 end
@@ -21,8 +22,8 @@ end
 function O.Tooltip(widget, title, description)
     widget:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(title)
-        GameTooltip:AddLine(type(description) == "function" and description() or description, 1, 1, 1, true)
+        GameTooltip:SetText(L[title])
+        GameTooltip:AddLine(L[type(description) == "function" and description() or description], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -31,6 +32,10 @@ end
 function O.ClosePicker()
     pickerSession = nil
     if picker then picker:Hide(); picker = nil end
+end
+
+function O.IsChoosingColor()
+    return pickerSession ~= nil and picker ~= nil and picker:IsShown()
 end
 
 local function CanChange()
@@ -69,7 +74,7 @@ end
 local function Button(caption, x, y, width, action)
     local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     button:SetSize(width, 26); button:SetPoint("TOPLEFT", x, y)
-    button:SetText(caption)
+    button:SetText(L[caption])
     button:SetScript("OnClick", function() if CanChange() then action() end end)
     panel.widgets[#panel.widgets + 1] = button
     return button
@@ -82,7 +87,7 @@ local function Dropdown(caption, y, choices, getter, setter, description)
     dropdown:SetupMenu(function(_, root)
         for _, choice in ipairs(choices) do
             local value, text = choice[1], choice[2]
-            root:CreateRadio(text, function() return getter() == value end, function()
+            root:CreateRadio(L[text], function() return getter() == value end, function()
                 if not CanChange() then return end
                 O.ClosePicker(); setter(value); O.Refresh()
             end)
@@ -95,24 +100,25 @@ end
 
 function O.Refresh()
     if not panel then return end
-    panel.palette:SetDefaultText("Choose a palette")
+    panel.palette:SetDefaultText(L["Choose a palette"])
     panel.style:GenerateMenu(); panel.palette:GenerateMenu()
     panel.barColor.swatch:SetColorTexture(A.Color("absorb"))
     panel.textColor.swatch:SetColorTexture(A.Color("numbers"))
     panel.groupFrames:SetChecked(db.groupFrames.enabled)
+    panel.executeEnabled:SetChecked(db.executeEnabled)
     panel.groupOthers:SetChecked(ns.Native.ShowsOthers())
-    panel.groupCorner:SetDefaultText(({ tl = "Top left", tr = "Top right", bl = "Bottom left", br = "Bottom right", c = "Center" })[db.groupFrames.corner])
-    panel.groupSize:SetDefaultText(tostring(db.groupFrames.size) .. " px")
-    panel.groupTime:SetDefaultText(({ seconds = "Seconds (5s)", number = "Number (5)", icon = "Icon only" })[db.groupFrames.timeFormat])
-    panel.groupSoon:SetDefaultText(db.groupFrames.soonReady == 0 and "Off" or tostring(db.groupFrames.soonReady) .. " seconds")
+    panel.groupCorner:SetDefaultText(L[({ tl = "Top left", tr = "Top right", bl = "Bottom left", br = "Bottom right", c = "Center" })[db.groupFrames.corner]])
+    panel.groupSize:SetDefaultText(string.format(L["%d px"], db.groupFrames.size))
+    panel.groupTime:SetDefaultText(L[({ seconds = "Seconds (5s)", number = "Number (5)", icon = "Icon only" })[db.groupFrames.timeFormat]])
+    panel.groupSoon:SetDefaultText(db.groupFrames.soonReady == 0 and L["Off"] or string.format(L[db.groupFrames.soonReady == 1 and "%d second" or "%d seconds"], db.groupFrames.soonReady))
     for _, widget in ipairs(panel.widgets) do widget:SetEnabled(not InCombatLockdown()) end
     panel.groupOthers:SetEnabled(not InCombatLockdown() and ns.Native.strategy ~= "all")
-    panel.groupFrameNote:SetText(ns.Native.strategy == "all"
+    panel.groupFrameNote:SetText(L[ns.Native.strategy == "all"
         and "Weakened Soul from every priest can be shown accurately."
-        or "Other debuffs can look like another priest's Weakened Soul. Off by default to avoid false alerts.")
+        or "Other debuffs can look like another priest's Weakened Soul. Off by default to avoid false alerts."])
     panel.updateRaidPreview()
-    panel.hint:SetText(InCombatLockdown() and "Appearance can be changed after combat."
-        or "Changes save automatically for this character.")
+    panel.hint:SetText(L[InCombatLockdown() and "Appearance can be changed after combat."
+        or "Changes save automatically for this character."])
 end
 
 local function EditLayout(toggle)
@@ -123,23 +129,25 @@ local function EditLayout(toggle)
 end
 
 local function BuildPage()
+    local translatedOffset = ns.IsEnglish and 0 or 34
     canvas = CreateFrame("Frame", nil, UIParent)
     canvas:Hide()
     local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 0, -4)
-    scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+    scroll:SetPoint("BOTTOMRIGHT", -28, ns.IsEnglish and 30 or 64)
     panel = CreateFrame("Frame", "PriestShieldTrackerOptions", scroll)
-    panel:SetSize(560, 808)
+    panel:SetSize(560, 916 + translatedOffset)
     scroll:SetScrollChild(panel)
     panel.widgets = {}
     Label(panel, "PriestShieldTracker", 22, 20, -16)
-    Label(panel, "Choose your look here. Move and resize the display in Edit Mode.", 12, 20, -49)
+    local intro = Label(panel, "Choose your look here. Move and resize the display in Edit Mode.", 12, 20, -49)
+    intro:SetWidth(400); intro:SetJustifyH("LEFT")
     local sample = CreateFrame("Frame", nil, panel)
     sample:SetPoint("TOPLEFT", 20, -82); sample:SetSize(400, 85)
     local backdrop = sample:CreateTexture(nil, "BACKGROUND")
     backdrop:SetAllPoints(); backdrop:SetColorTexture(0.025, 0.02, 0.04, 0.9)
     Label(sample, "Preview", 11, 12, -8)
-    Label(sample, "Shield Ready  8.2", 14, 150, -8, "ready")
+    Label(sample, L["Shield Ready"] .. "  8.2", 14, 150, -8, "ready")
     local meter = CreateFrame("StatusBar", nil, sample)
     meter:SetSize(376, 22); meter:SetPoint("TOPLEFT", 12, -31)
     meter:SetStatusBarTexture(WHITE); meter:SetMinMaxValues(0, 1500)
@@ -166,9 +174,10 @@ local function BuildPage()
         "Choose a Classic solid bar, a Smooth bar, or an animated Liquid bar. The preview shows your choice.")
     local palettes = {}
     for _, name in ipairs(A.presetNames) do palettes[#palettes + 1] = { name, name } end
+    palettes[#palettes + 1] = { "Random", "Random" }
     panel.palette = Dropdown("Color palette", -234, palettes, function() return db.appearance.preset end,
         function(value) A.Preset(value) end,
-        "Apply a set of matching bar and text colors. You can adjust them with Bar color and Text color.")
+        "Choose matching bar and text colors. You can adjust them with Bar color and Text color.")
     Label(panel, "Custom colors", 13, 20, -285)
     panel.barColor = Button("Bar color", 200, -278, 105, function() ChooseColor("bar") end)
     panel.textColor = Button("Text color", 315, -278, 105, function() ChooseColor("text") end)
@@ -181,8 +190,9 @@ local function BuildPage()
     local function Check(caption, x, y, action, description, hitWidth)
         local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
         check:SetSize(26, 26); check:SetPoint("TOPLEFT", x, y)
-        check:SetHitRectInsets(0, -(hitWidth or 200), 0, 0)
-        Label(check, caption, 12, 30, -6)
+        check:SetHitRectInsets(0, -(ns.IsEnglish and (hitWidth or 200) or 374), 0, 0)
+        local captionText = Label(check, caption, 12, 30, -6)
+        if not ns.IsEnglish then captionText:SetWidth(360); captionText:SetJustifyH("LEFT") end
         panel.widgets[#panel.widgets + 1] = check
         check:SetScript("OnClick", function(self)
             if not CanChange() then return end
@@ -194,31 +204,31 @@ local function BuildPage()
     Label(panel, "Party and raid frames", 14, 20, -324)
     panel.groupFrames = Check("Show Weakened Soul icons", 16, -348, function(value) db.groupFrames.enabled = value end,
         "Show Weakened Soul on Blizzard party and raid frames after you shield someone. The countdown shows when they can receive another shield.")
-    panel.groupOthers = Check("Include other priests", 260, -348, function(value) db.groupFrames.showOthers = value end,
+    panel.groupOthers = Check("Include other priests", ns.IsEnglish and 260 or 16, -348 - translatedOffset, function(value) db.groupFrames.showOthers = value end,
         function()
             if ns.Native.strategy == "all" then
                 return "Weakened Soul from every priest is already included accurately. Yours have a red border; other priests' have a purple border."
             end
             return "Also show Weakened Soul from other priests, with a purple border. Yours have a red border. Off by default because some other debuffs can look like their Weakened Soul."
         end, 160)
-    panel.groupFrameNote = Label(panel, "", 11, 20, -381)
+    panel.groupFrameNote = Label(panel, "", 11, 20, -381 - translatedOffset)
     panel.groupFrameNote:SetWidth(400); panel.groupFrameNote:SetJustifyH("LEFT")
-    panel.groupCorner = Dropdown("Icon position", -430,
+    panel.groupCorner = Dropdown("Icon position", -430 - translatedOffset,
         { { "tr", "Top right" }, { "tl", "Top left" }, { "br", "Bottom right" }, { "bl", "Bottom left" }, { "c", "Center" } },
         function() return db.groupFrames.corner end, function(value) db.groupFrames.corner = value; ns.GroupFrames.Configure() end,
         "Choose the corner or center of each party or raid frame where the Weakened Soul icon appears.")
-    panel.groupSize = Dropdown("Icon size", -466, { { 12, "12 px" }, { 16, "16 px" }, { 20, "20 px" }, { 24, "24 px" }, { 32, "32 px" } },
+    panel.groupSize = Dropdown("Icon size", -466 - translatedOffset, { { 12, "12 px" }, { 16, "16 px" }, { 20, "20 px" }, { 24, "24 px" }, { 32, "32 px" } },
         function() return db.groupFrames.size end, function(value) db.groupFrames.size = value; ns.GroupFrames.Configure() end,
         "Set the size of the Weakened Soul icons on party and raid frames. The sample frames below update immediately.")
-    panel.groupTime = Dropdown("Countdown", -502, { { "seconds", "Seconds (5s)" }, { "number", "Number (5)" }, { "icon", "Icon only" } },
+    panel.groupTime = Dropdown("Countdown", -502 - translatedOffset, { { "seconds", "Seconds (5s)" }, { "number", "Number (5)" }, { "icon", "Icon only" } },
         function() return db.groupFrames.timeFormat end, function(value) db.groupFrames.timeFormat = value; ns.GroupFrames.Configure() end,
         "Show seconds with an s, just the number, or only the icon and its cooldown swipe.")
-    panel.groupSoon = Dropdown("Turn green at", -538, { { 0, "Off" }, { 1, "1 second" }, { 2, "2 seconds" }, { 3, "3 seconds" }, { 5, "5 seconds" } },
+    panel.groupSoon = Dropdown("Turn green at", -538 - translatedOffset, { { 0, "Off" }, { 1, "1 second" }, { 2, "2 seconds" }, { 3, "3 seconds" }, { 5, "5 seconds" } },
         function() return db.groupFrames.soonReady end, function(value) db.groupFrames.soonReady = value; ns.GroupFrames.Configure() end,
         "Turn the countdown text green when less than this much time remains before the player can receive another shield. Off keeps it white; Icon only hides the text.")
-    Label(panel, "Raid frame preview", 14, 20, -576)
+    Label(panel, "Raid frame preview", 14, 20, -576 - translatedOffset)
     local raidSample = CreateFrame("Frame", nil, panel)
-    raidSample:SetPoint("TOPLEFT", 20, -602); raidSample:SetSize(400, 94)
+    raidSample:SetPoint("TOPLEFT", 20, -602 - translatedOffset); raidSample:SetSize(400, 94)
     panel.raidPreview = {}
     for index, key in ipairs({ "mine", "others" }) do
         local card = CreateFrame("Frame", nil, raidSample)
@@ -244,15 +254,37 @@ local function BuildPage()
         if sampleElapsed < 0.1 then return end
         sampleElapsed = 0; panel.updateRaidPreview()
     end)
-    panel.editButton = Button("Edit layout", 20, -726, 190, EditLayout)
-    panel.resetButton = Button("Reset appearance", 230, -726, 190, function()
+    Label(panel, "Shadow Word: Death", 14, 20, -724 - translatedOffset)
+    panel.executeEnabled = Check("Enabled", 20, -746 - translatedOffset, function(value)
+        db.executeEnabled = value
+        callbacks.layout(); O.Refresh()
+    end, "Show the Shadow Word: Death glow on action buttons and cooldown manager icons.", 100)
+    panel.executeNote = Label(panel, "Ignores resistances, absorbs, and damage reduction.", 11, 20, -782 - translatedOffset)
+    panel.executeNote:SetWidth(400); panel.executeNote:SetJustifyH("LEFT")
+    panel.editButton = Button("Edit layout", 20, -832 - translatedOffset, 190, EditLayout)
+    panel.resetButton = Button("Reset appearance", 230, -832 - translatedOffset, 190, function()
         O.ClosePicker(); db.appearance.style = "liquid"; A.Preset("Soul")
         db.groupOptions.weakenedSoul.showIcon = true
         callbacks.layout(); O.Refresh()
     end)
     O.Tooltip(panel.editButton, "Edit layout", "Move and resize each personal display group. Click a group to turn it on or off with its Enabled checkbox.")
     O.Tooltip(panel.resetButton, "Reset appearance", "Restore Liquid bars, the Soul palette, and the crossed-out shield icon. Your layout and enabled groups stay as they are.")
-    panel.hint = Label(panel, "", 11, 20, -768)
+    panel.hint = Label(panel, "", 11, 20, -874 - translatedOffset)
+    -- Keep the version visible at the bottom of the pane while content scrolls.
+    local version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version")
+        or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) or L["Unknown"]
+    panel.version = Label(canvas, string.format(L["Version %s"], version), 10, 0, 0)
+    panel.version:ClearAllPoints()
+    panel.version:SetPoint("BOTTOMRIGHT", canvas, "BOTTOMRIGHT", -42, 10)
+    panel.version:SetTextColor(0.65, 0.65, 0.65)
+    if not ns.IsEnglish then
+        panel.translationNote = Label(canvas, "Wording mistakes? Report them via a GitHub issue or CurseForge comment.", 10, 0, 0)
+        panel.translationNote:ClearAllPoints()
+        panel.translationNote:SetPoint("BOTTOMRIGHT", canvas, "BOTTOMRIGHT", -42, 30)
+        panel.translationNote:SetWidth(400)
+        panel.translationNote:SetJustifyH("RIGHT")
+        panel.translationNote:SetTextColor(0.75, 0.75, 0.75)
+    end
     panel:SetScript("OnShow", O.Refresh)
     panel:SetScript("OnHide", O.ClosePicker)
     canvas:SetScript("OnShow", O.Refresh)
@@ -317,9 +349,9 @@ local function BuildMinimapButton()
     end)
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT"); GameTooltip:SetText("PriestShieldTracker")
-        GameTooltip:AddLine("Left-click: Toggle settings", 1, 1, 1)
-        GameTooltip:AddLine("Right-click: Toggle Edit Mode (Shield Ready)", 1, 1, 1)
-        GameTooltip:AddLine("Drag to move around the minimap", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(L["Left-click: Toggle settings"], 1, 1, 1)
+        GameTooltip:AddLine(L["Right-click: Toggle Edit Mode (Shield Ready)"], 1, 1, 1)
+        GameTooltip:AddLine(L["Drag to move around the minimap"], 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
