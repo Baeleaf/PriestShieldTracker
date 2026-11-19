@@ -36,7 +36,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          existing=$(gh api "repos/$GH_REPO/git/ref/tags/v0.3.4" --jq .object.sha 2>/dev/null || true)
+          existing=$(git ls-remote --tags origin refs/tags/v0.3.4 | cut -f1)
           if [ -n "$existing" ]; then
             test "$existing" = "$GITHUB_SHA" || { echo 'Published tag points elsewhere; refusing to move it.'; exit 1; }
           else
